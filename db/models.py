@@ -1,11 +1,13 @@
-from sqlalchemy import Column, Integer, String, create_engine
-from sqlalchemy.orm import declarative_base
+from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey
+from db.models import Base # Assuming Base is defined here
 
-Base = declarative_base()
-
-class Asset(Base):
-    __tablename__ = 'assets'
+class MarketData(Base):
+    __tablename__ = 'market_data'
     id = Column(Integer, primary_key=True, index=True)
-    ticker = Column(String, unique=True, index=True, nullable=False)
-    asset_class = Column(String)
-    sector = Column(String)
+    ticker = Column(String, index=True, nullable=False)
+    date = Column(Date, index=True, nullable=False)
+    open = Column(Float)
+    high = Column(Float)
+    low = Column(Float)
+    close = Column(Float)
+    volume = Column(Float)
