@@ -14,11 +14,17 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here
-# for 'autogenerate' support
-# from myapp import mymodel
-# target_metadata = mymodel.Base.metadata
-target_metadata = None
+import os
+import sys
+
+# This tells Alembic to look in your root folder so it can find the 'db' folder
+sys.path.append(os.getcwd()) 
+
+# Import the Base from your models file
+from db.models import Base
+
+# Tell Alembic to use your models to generate blueprints
+target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
