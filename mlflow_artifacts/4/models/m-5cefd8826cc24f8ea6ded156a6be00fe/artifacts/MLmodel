@@ -1,0 +1,22 @@
+artifact_path: file:///C:/Users/tewar/AI Hedge Fund Firm/mlflow_artifacts/4/models/m-5cefd8826cc24f8ea6ded156a6be00fe/artifacts
+flavors:
+  python_function:
+    data: model.ubj
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.xgboost
+    python_version: 3.12.1
+  xgboost:
+    code: null
+    data: model.ubj
+    model_class: xgboost.sklearn.XGBRegressor
+    model_format: ubj
+    xgb_version: 3.4.1
+mlflow_version: 3.15.1
+model_id: m-5cefd8826cc24f8ea6ded156a6be00fe
+model_size_bytes: 114318
+model_uuid: m-5cefd8826cc24f8ea6ded156a6be00fe
+prompts: null
+run_id: 84519f59514147448b3383426f43e5f2
+utc_time_created: '2026-08-21 11:46:50.523658'

@@ -2,197 +2,114 @@ import numpy as np
 
 
 def purged_time_series_split(
-    n_samples,
-    n_splits=3,
+    X,
+    n_splits=15,
     purge_gap=5,
+    test_size=None,
 ):
     """
-    Generate chronological train/test splits with a purge gap.
+    Expanding-window purged walk-forward validation.
+
+    Train always consists of observations strictly before the test period.
+    purge_gap observations are removed between train and test to prevent
+    overlap caused by the 5-day forward-return target.
 
     Parameters
     ----------
-    n_samples : int
-        Number of observations.
-
+    X : array-like
+        Dataset whose length determines the number of observations.
     n_splits : int
-        Number of chronological test folds.
-
+        Number of walk-forward folds.
     purge_gap : int
-        Number of observations removed between the end of
-        training and the beginning of testing.
+        Number of observations removed between train and test.
+    test_size : int or None
+        Number of observations in each test fold. If None, automatically
+        divides the usable dataset across n_splits.
 
     Yields
     ------
     train_indices, test_indices
-        NumPy arrays containing the corresponding indices.
-
-    Example
-    -------
-    TRAIN | PURGE | TEST
-    0 ... 99 | 100 ... 104 | 105 ...
     """
 
+    n_samples = len(X)
+
     if n_samples <= 0:
-        raise ValueError("n_samples must be positive.")
+        return
 
     if n_splits < 1:
-        raise ValueError("n_splits must be at least 1.")
+        raise ValueError("n_splits must be >= 1")
 
     if purge_gap < 0:
-        raise ValueError("purge_gap cannot be negative.")
+        raise ValueError("purge_gap must be >= 0")
 
-    # We need enough observations for:
-    #
-    #   n_splits × test_size
-    #   + purge gaps
-    #   + expanding training windows
-    #
-    # The final portion of the dataset is allowed to be
-    # smaller than the nominal test size.
-
-    test_size = n_samples // (n_splits + 1)
+    if test_size is None:
+        # Leave enough observations for an initial training period
+        test_size = n_samples // (n_splits + 5)
 
     if test_size <= 0:
-        raise ValueError(
-            "Not enough observations for the requested "
-            "number of splits."
-        )
+        raise ValueError("test_size must be > 0")
 
-    for fold in range(1, n_splits + 1):
+    for i in range(n_splits):
 
-        train_end = fold * test_size
+        test_start = test_size * (i + 1) + purge_gap
 
-        purge_start = train_end
-        purge_end = train_end + purge_gap
-
-        test_start = purge_end
         test_end = test_start + test_size
 
-        if test_start >= n_samples:
+        if test_end > n_samples:
+            test_end = n_samples
+
+        train_end = test_start - purge_gap
+
+        if train_end <= 0 or test_start >= n_samples:
             break
 
-        test_end = min(test_end, n_samples)
-
-        train_indices = np.arange(
-            0,
-            train_end,
-        )
-
-        test_indices = np.arange(
-            test_start,
-            test_end,
-        )
-
-        if len(train_indices) == 0:
-            continue
+        train_indices = np.arange(0, train_end)
+        test_indices = np.arange(test_start, test_end)
 
         if len(test_indices) == 0:
-            continue
+            break
 
         yield train_indices, test_indices
 
 
-def validate_purged_splits(
-    n_samples,
-    n_splits=3,
-    purge_gap=5,
-):
-    """
-    Validate that generated splits obey chronological ordering
-    and the requested purge gap.
-    """
-
-    splits = list(
-        purged_time_series_split(
-            n_samples=n_samples,
-            n_splits=n_splits,
-            purge_gap=purge_gap,
-        )
-    )
-
-    if not splits:
-        raise ValueError("No valid splits generated.")
-
-    previous_test_end = -1
-
-    for fold_number, (train_idx, test_idx) in enumerate(
-        splits,
-        start=1,
-    ):
-
-        # Training must come before testing.
-        assert train_idx.max() < test_idx.min(), (
-            f"Fold {fold_number}: "
-            "training data overlaps test data."
-        )
-
-        # Explicit purge-gap validation.
-        actual_gap = test_idx.min() - train_idx.max() - 1
-
-        assert actual_gap >= purge_gap, (
-            f"Fold {fold_number}: "
-            f"expected purge gap >= {purge_gap}, "
-            f"got {actual_gap}."
-        )
-
-        # Test folds must move forward through time.
-        assert test_idx.min() > previous_test_end, (
-            f"Fold {fold_number}: "
-            "test windows overlap or move backwards."
-        )
-
-        previous_test_end = test_idx.max()
-
-    return splits
-
-
 if __name__ == "__main__":
-
-    N = 2482
-    N_SPLITS = 3
-    PURGE_GAP = 5
 
     print("=" * 70)
     print("PURGED TIME-SERIES SPLITTER TEST")
     print("=" * 70)
 
-    splits = validate_purged_splits(
-        n_samples=N,
-        n_splits=N_SPLITS,
-        purge_gap=PURGE_GAP,
-    )
+    n_samples = 2482
+    purge_gap = 5
+
+    X = np.arange(n_samples)
 
     for fold, (train_idx, test_idx) in enumerate(
-        splits,
+        purged_time_series_split(
+            X,
+            n_splits=15,
+            purge_gap=purge_gap,
+        ),
         start=1,
     ):
 
         train_end = train_idx[-1]
         test_start = test_idx[0]
 
+        purge_start = train_end + 1
+        purge_end = test_start - 1
+
+        actual_gap = test_start - train_end - 1
+
         print(f"\nFold {fold}")
         print("-" * 50)
+        print(f"Train : {train_idx[0]} → {train_end}")
+        print(f"Purge : {purge_start} → {purge_end}")
+        print(f"Test  : {test_start} → {test_idx[-1]}")
+        print(f"Actual purge gap: {actual_gap}")
 
-        print(
-            f"Train : {train_idx[0]} → "
-            f"{train_idx[-1]}"
-        )
-
-        print(
-            f"Purge : "
-            f"{train_end + 1} → "
-            f"{test_start - 1}"
-        )
-
-        print(
-            f"Test  : {test_idx[0]} → "
-            f"{test_idx[-1]}"
-        )
-
-        print(
-            f"Actual purge gap: "
-            f"{test_start - train_end - 1}"
-        )
+        assert actual_gap == purge_gap
+        assert train_idx[-1] < test_idx[0]
+        assert len(set(train_idx) & set(test_idx)) == 0
 
     print("\n" + "=" * 70)
     print("ALL PURGE VALIDATION CHECKS PASSED")
