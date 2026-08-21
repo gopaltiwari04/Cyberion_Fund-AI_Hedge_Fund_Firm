@@ -6,11 +6,16 @@ import io
 from datetime import datetime
 
 # MinIO (S3) Configuration
+MINIO_ENDPOINT = os.getenv(
+    "MINIO_URL",
+    "http://localhost:9000"
+)
+
 s3_client = boto3.client(
-    's3',
-    endpoint_url='http://localhost:9000',
-    aws_access_key_id='minioadmin',
-    aws_secret_access_key='minioadmin'
+    "s3",
+    endpoint_url=MINIO_ENDPOINT,
+    aws_access_key_id="minioadmin",
+    aws_secret_access_key="minioadmin"
 )
 
 BUCKET_NAME = 'raw-market-data'

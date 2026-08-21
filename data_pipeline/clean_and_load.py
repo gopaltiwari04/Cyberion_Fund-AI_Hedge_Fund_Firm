@@ -1,4 +1,5 @@
 import io
+import os
 
 import boto3
 import pandas as pd
@@ -11,16 +12,30 @@ from sqlalchemy import create_engine
 # CONNECTIONS
 # ============================================================
 
+MINIO_ENDPOINT = os.getenv(
+    "MINIO_ENDPOINT",
+    "http://localhost:9000",
+)
+
+DB_URL = os.getenv(
+    "DB_URL",
+    "postgresql://quant_user:quant_password@localhost:5432/quant_db",
+)
+
+
+MINIO_ENDPOINT = os.getenv(
+    "MINIO_ENDPOINT",
+    "http://localhost:9000"
+)
+
 s3_client = boto3.client(
     "s3",
-    endpoint_url="http://localhost:9000",
+    endpoint_url=MINIO_ENDPOINT,
     aws_access_key_id="minioadmin",
-    aws_secret_access_key="minioadmin",
+    aws_secret_access_key="minioadmin"
 )
 
 BUCKET_NAME = "raw-market-data"
-
-DB_URL = "postgresql://quant_user:quant_password@localhost:5432/quant_db"
 
 engine = create_engine(DB_URL)
 
@@ -92,25 +107,32 @@ def clean_and_load_ticker(ticker):
 
     for column in df.columns:
 
-        if column == "Date":
+        column_str = str(column)
+
+        if "Date" in column_str:
             rename_map[column] = "date"
 
-        elif column == "Open":
+        elif "Open" in column_str:
             rename_map[column] = "open"
 
-        elif column == "High":
+        elif "High" in column_str:
             rename_map[column] = "high"
 
-        elif column == "Low":
+        elif "Low" in column_str:
             rename_map[column] = "low"
 
-        elif column == "Close":
+        elif "Close" in column_str:
             rename_map[column] = "close"
 
-        elif column == "Volume":
+        elif "Volume" in column_str:
             rename_map[column] = "volume"
 
+
     df = df.rename(rename_map)
+
+    print(f"Standardized columns: {df.columns}")
+
+    
 
     # --------------------------------------------------------
     # 6. Make sure required columns exist
