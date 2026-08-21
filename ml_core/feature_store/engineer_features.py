@@ -9,6 +9,8 @@ from sqlalchemy import create_engine, text
 from ta.momentum import RSIIndicator
 from ta.trend import MACD
 
+from statsmodels.tsa.regime_switching.markov_regression import MarkovRegression
+
 
 # ============================================================
 # CONFIGURATION
@@ -37,6 +39,124 @@ TICKERS = ["AAPL", "MSFT", "GOOGL", "AMZN", "SPY"]
 # ============================================================
 # REDIS CONNECTION TEST
 # ============================================================
+
+def calculate_point_in_time_regimes(returns, min_observations=500):
+    """
+    Calculate point-in-time market regimes.
+
+    At date t, the model is fitted only using observations
+    available up to t. No future returns are used.
+
+    Returns:
+        pandas.Series containing:
+        0 = bearish/low-return regime
+        1 = bullish/high-return regime
+    """
+
+    regimes = pd.Series(
+        index=returns.index,
+        dtype="Int64"
+    )
+
+    valid_returns = returns.dropna()
+
+    if len(valid_returns) < min_observations:
+        print(
+            f"Not enough observations for regime model "
+            f"({len(valid_returns)} < {min_observations})."
+        )
+        return regimes.fillna(0).astype(int)
+
+    # Start assigning regimes once sufficient history exists.
+    #
+    # To keep runtime reasonable, we refit periodically rather
+    # than fitting a new Markov model on every single day.
+    last_regime = 0
+    model_result = None
+
+    for i in range(min_observations, len(valid_returns)):
+
+        # Refit every 20 observations.
+        # This prevents thousands of expensive model fits.
+        if model_result is None or i % 20 == 0:
+
+            training_data = valid_returns.iloc[:i]
+
+            try:
+                model = MarkovRegression(
+                    training_data,
+                    k_regimes=2,
+                    trend="c",
+                    switching_variance=True,
+                )
+
+                model_result = model.fit(
+                    disp=False
+                )
+
+            except Exception as e:
+                print(
+                    f"Regime model fitting failed at "
+                    f"{valid_returns.index[i].date()}: {e}"
+                )
+                model_result = None
+
+        if model_result is None:
+            regimes.loc[
+                valid_returns.index[i]
+            ] = last_regime
+            continue
+
+        try:
+            # IMPORTANT:
+            # Use only probabilities generated from the
+            # information available through the training window.
+            probabilities = (
+                model_result.filtered_marginal_probabilities
+            )
+
+            latest_probabilities = (
+                model_result.filtered_marginal_probabilities
+            )
+
+            # Determine which model state has the higher estimated
+            # mean return. Markov regime labels themselves are arbitrary.
+            regime_means = model_result.params[
+                [
+                    "const[0]",
+                    "const[1]",
+                ]
+            ]
+
+            if regime_means.iloc[0] < regime_means.iloc[1]:
+                bearish_regime = 0
+                bullish_regime = 1
+            else:
+                bearish_regime = 1
+                bullish_regime = 0
+
+            raw_regime = int(
+                latest_probabilities.iloc[-1].idxmax()
+            )
+
+            regime = (
+                1
+                if raw_regime == bullish_regime
+                else 0
+            )
+
+            regimes.loc[
+                valid_returns.index[i]
+            ] = regime
+
+            last_regime = regime
+
+        except Exception:
+            regimes.loc[
+                valid_returns.index[i]
+            ] = last_regime
+
+    return regimes.fillna(0).astype(int)
 
 def test_redis_connection():
     try:
@@ -145,10 +265,8 @@ def calculate_features(df, ticker):
     # after validating the basic feature pipeline.
     # --------------------------------------------------------
 
-    df["regime"] = np.where(
-        df["return_1d"] >= 0,
-        1,
-        0,
+    df["regime"] = calculate_point_in_time_regimes(
+        df["return_1d"]
     )
 
     # --------------------------------------------------------
