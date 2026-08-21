@@ -55,8 +55,7 @@ def purged_time_series_split(
 
         test_end = test_start + test_size
 
-        if test_end > n_samples:
-            test_end = n_samples
+        test_end = min(test_end, n_samples)
 
         train_end = test_start - purge_gap
 

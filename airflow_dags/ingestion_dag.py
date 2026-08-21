@@ -1,7 +1,7 @@
+from datetime import datetime, timedelta, timezone
+
 from airflow import DAG
 from airflow.operators.bash import BashOperator
-from datetime import datetime, timedelta
-
 
 default_args = {
     "owner": "quant_dev",
@@ -18,7 +18,7 @@ with DAG(
     default_args=default_args,
     description="Ingests macro data, then cleans and loads market data",
     schedule_interval="0 18 * * 1-5",
-    start_date=datetime(2023, 1, 1),
+    start_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
     catchup=False,
 ) as dag:
 

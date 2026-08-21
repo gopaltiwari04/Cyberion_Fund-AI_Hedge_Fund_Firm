@@ -21,22 +21,19 @@ The final holdout is NOT used for model selection.
 
 import os
 import sys
-import numpy as np
-import pandas as pd
+
 import mlflow
 import mlflow.xgboost
-
-from sqlalchemy import create_engine
-
-from sklearn.linear_model import Ridge
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import (
-    mean_squared_error,
-    mean_absolute_error,
-)
-
+import numpy as np
+import pandas as pd
 import xgboost as xgb
-
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import Ridge
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_squared_error,
+)
+from sqlalchemy import create_engine
 
 # ============================================================
 # PATH SETUP
@@ -51,7 +48,6 @@ if PROJECT_ROOT not in sys.path:
 
 
 from ml_core.models.cv_utils import purged_time_series_split
-
 
 # ============================================================
 # CONFIGURATION

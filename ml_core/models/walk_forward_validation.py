@@ -3,9 +3,6 @@ import os
 import mlflow
 import numpy as np
 import pandas as pd
-
-from sqlalchemy import create_engine, text
-
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import Ridge
 from sklearn.metrics import (
@@ -14,7 +11,7 @@ from sklearn.metrics import (
 )
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-
+from sqlalchemy import create_engine, text
 
 # ============================================================
 # CONFIG
@@ -341,7 +338,7 @@ def main():
         run_name="Ridge_Purged_WalkForward"
     ):
 
-        metrics, folds = walk_forward(
+        metrics, _folds = walk_forward(
             "Ridge",
             ridge,
             df,
@@ -397,7 +394,7 @@ def main():
         run_name="RandomForest_Purged_WalkForward"
     ):
 
-        metrics, folds = walk_forward(
+        metrics, _folds = walk_forward(
             "RandomForest",
             rf,
             df,

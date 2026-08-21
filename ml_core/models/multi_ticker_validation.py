@@ -3,9 +3,6 @@ import os
 import mlflow
 import numpy as np
 import pandas as pd
-
-from sqlalchemy import create_engine, text
-
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import Ridge
 from sklearn.metrics import (
@@ -14,7 +11,7 @@ from sklearn.metrics import (
 )
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-
+from sqlalchemy import create_engine, text
 
 # ============================================================
 # CONFIGURATION
@@ -370,7 +367,7 @@ def run_ticker(ticker):
     ):
 
         
-        metrics, folds, ridge_actuals, ridge_predictions, ridge_dates = walk_forward(
+        metrics, _folds, ridge_actuals, ridge_predictions, ridge_dates = walk_forward(
             ridge,
             df,
         )
@@ -433,7 +430,7 @@ def run_ticker(ticker):
         run_name=f"{ticker}_RandomForest"
     ):
 
-        metrics, folds, rf_actuals, rf_predictions, rf_dates = walk_forward(
+        metrics, _folds, rf_actuals, rf_predictions, rf_dates = walk_forward(
             rf,
             df,
         )
@@ -516,7 +513,7 @@ def main():
                 predictions
             )
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
 
             print(
                 f"\nERROR processing "

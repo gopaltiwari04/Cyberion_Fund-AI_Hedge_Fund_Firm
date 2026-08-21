@@ -1,10 +1,9 @@
-import os
-import requests
-import pandas as pd
-import boto3
 import io
-from datetime import datetime
+import os
+from datetime import datetime, timezone
 
+import boto3
+import pandas as pd
 
 # --------------------------------------------------------
 # MinIO Configuration
@@ -79,7 +78,7 @@ def fetch_fred_series(series_id):
 
     file_key = (
         f"fred/{series_id}/"
-        f"{datetime.now().strftime('%Y-%m-%d')}.parquet"
+        f"{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.parquet"
     )
 
     s3_client.upload_fileobj(
