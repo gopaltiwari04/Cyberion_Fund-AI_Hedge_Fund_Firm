@@ -4,11 +4,8 @@ import os
 import boto3
 import pandas as pd
 import polars as pl
-
 from sqlalchemy import create_engine, text
-
 from validate_market_data import validate_market_data
-
 
 # ============================================================
 # CONNECTIONS
@@ -63,11 +60,10 @@ def clean_and_load_ticker(ticker):
         print(f"No raw data found for {ticker}")
         return
 
-    latest_file = sorted(
+    latest_file = max(
         response["Contents"],
         key=lambda x: x["LastModified"],
-        reverse=True,
-    )[0]["Key"]
+    )["Key"]
 
     print(f"Latest file: {latest_file}")
 

@@ -1,6 +1,7 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session, sessionmaker
 
 DATABASE_URL = "postgresql://quant_user:quant_password@localhost:5432/quant_db"
 engine = create_engine(DATABASE_URL)
@@ -16,9 +17,9 @@ def get_db():
         db.close()
 
 @app.get("/health")
-def health_check(db: Session = Depends(get_db)):
+def health_check(db: Session = Depends(get_db)):  # noqa: B008
     try:
         db.execute(text("SELECT 1"))
         return {"status": "healthy", "database": "connected"}
-    except Exception as e:
+    except SQLAlchemyError as e:
         raise HTTPException(status_code=500, detail=str(e))

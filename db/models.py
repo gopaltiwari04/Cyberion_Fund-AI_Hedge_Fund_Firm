@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Date, UniqueConstraint, create_engine
+from sqlalchemy import Column, Date, Float, Integer, String, UniqueConstraint
 from sqlalchemy.orm import declarative_base
 
 # 1. Define Base ONCE at the top

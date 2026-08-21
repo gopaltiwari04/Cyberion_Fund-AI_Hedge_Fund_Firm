@@ -1,16 +1,13 @@
-import os
 import json
+import os
 
 import numpy as np
 import pandas as pd
 import redis
-
 from sqlalchemy import create_engine, text
+from statsmodels.tsa.regime_switching.markov_regression import MarkovRegression
 from ta.momentum import RSIIndicator
 from ta.trend import MACD
-
-from statsmodels.tsa.regime_switching.markov_regression import MarkovRegression
-
 
 # ============================================================
 # CONFIGURATION
@@ -94,7 +91,7 @@ def calculate_point_in_time_regimes(returns, min_observations=500):
                     disp=False
                 )
 
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 print(
                     f"Regime model fitting failed at "
                     f"{valid_returns.index[i].date()}: {e}"
@@ -111,10 +108,6 @@ def calculate_point_in_time_regimes(returns, min_observations=500):
             # IMPORTANT:
             # Use only probabilities generated from the
             # information available through the training window.
-            probabilities = (
-                model_result.filtered_marginal_probabilities
-            )
-
             latest_probabilities = (
                 model_result.filtered_marginal_probabilities
             )
@@ -129,10 +122,8 @@ def calculate_point_in_time_regimes(returns, min_observations=500):
             ]
 
             if regime_means.iloc[0] < regime_means.iloc[1]:
-                bearish_regime = 0
                 bullish_regime = 1
             else:
-                bearish_regime = 1
                 bullish_regime = 0
 
             raw_regime = int(
@@ -151,7 +142,7 @@ def calculate_point_in_time_regimes(returns, min_observations=500):
 
             last_regime = regime
 
-        except Exception:
+        except Exception:  # noqa: BLE001
             regimes.loc[
                 valid_returns.index[i]
             ] = last_regime
@@ -162,7 +153,7 @@ def test_redis_connection():
     try:
         redis_client.ping()
         print("Redis connection: OK")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         raise RuntimeError(
             f"Could not connect to Redis at "
             f"{REDIS_HOST}:{REDIS_PORT}: {e}"

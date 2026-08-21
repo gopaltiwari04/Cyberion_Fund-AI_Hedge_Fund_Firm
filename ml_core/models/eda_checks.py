@@ -2,7 +2,6 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 from statsmodels.tsa.stattools import adfuller
 
-
 DB_URL = "postgresql://quant_user:quant_password@localhost:5432/quant_db"
 
 engine = create_engine(DB_URL)

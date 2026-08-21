@@ -1,12 +1,13 @@
+from datetime import datetime, timedelta, timezone
+
 from airflow import DAG
 from airflow.operators.bash import BashOperator
-from datetime import datetime, timedelta
 
 # Define the scheduling rules
 default_args = {
     'owner': 'quant_user',
     'depends_on_past': False,
-    'start_date': datetime(2024, 1, 1),
+    'start_date': datetime(2024, 1, 1, tzinfo=timezone.utc),
     'retries': 1,
     'retry_delay': timedelta(minutes=1),
 }

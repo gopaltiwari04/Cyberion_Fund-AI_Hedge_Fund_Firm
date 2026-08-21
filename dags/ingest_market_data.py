@@ -1,12 +1,10 @@
+import io
 import os
 import time
-import io
-from datetime import datetime
+from datetime import datetime, timezone
 
-import yfinance as yf
-import pandas as pd
 import boto3
-
+import yfinance as yf
 
 # --------------------------------------------------------
 # MinIO Configuration
@@ -38,7 +36,7 @@ def create_bucket_if_not_exists():
             Bucket=BUCKET_NAME
         )
 
-    except Exception:
+    except Exception:  # noqa: BLE001
         print(
             f"Bucket {BUCKET_NAME} does not exist. "
             f"Creating it..."
@@ -86,7 +84,7 @@ def download_ticker(ticker, max_retries=3):
                 f"No data returned for {ticker}"
             )
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
 
             print(
                 f"Error downloading {ticker}: {e}"
@@ -158,7 +156,7 @@ def fetch_and_store_data(tickers):
 
         file_key = (
             f"yfinance/{ticker}/"
-            f"{datetime.now().strftime('%Y-%m-%d')}.parquet"
+            f"{datetime.now(timezone.utc).strftime('%Y-%m-%d')}.parquet"
         )
 
         s3_client.upload_fileobj(

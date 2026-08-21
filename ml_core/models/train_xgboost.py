@@ -15,9 +15,8 @@ sys.path.append(
     os.path.dirname(os.path.abspath(__file__))
 )
 
-from dataset import FEATURES, load_modeling_dataset
 from cv_utils import purged_time_series_split
-
+from dataset import FEATURES, load_modeling_dataset
 
 # ============================================================
 # CONFIGURATION
