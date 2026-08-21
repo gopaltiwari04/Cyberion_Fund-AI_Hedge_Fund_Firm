@@ -5,7 +5,7 @@ import boto3
 import pandas as pd
 import polars as pl
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 
 from validate_market_data import validate_market_data
 
@@ -271,16 +271,46 @@ def clean_and_load_ticker(ticker):
         final_pd["date"]
     ).dt.date
 
-    # --------------------------------------------------------
-    # 15. Load into PostgreSQL
-    # --------------------------------------------------------
+    # PostgreSQL upsert
+    upsert_sql = text("""
+        INSERT INTO market_data (
+            ticker,
+            date,
+            open,
+            high,
+            low,
+            close,
+            volume
+            )
+        VALUES (
+            :ticker,
+            :date,
+            :open,
+            :high,
+            :low,
+            :close,
+            :volume
+        )
+        ON CONFLICT (ticker, date)
+        DO UPDATE SET
+            open = EXCLUDED.open,
+            high = EXCLUDED.high,
+            low = EXCLUDED.low,
+            close = EXCLUDED.close,
+            volume = EXCLUDED.volume
+    """)
 
-    final_pd.to_sql(
-        "market_data",
-        engine,
-        if_exists="append",
-        index=False,
-        method="multi",
+    records = final_pd.to_dict(orient="records")
+
+    with engine.begin() as connection:
+        connection.execute(
+            upsert_sql,
+            records
+        )
+
+    print(
+        f"Successfully upserted "
+        f"{len(final_pd)} rows for {ticker} into PostgreSQL."
     )
 
     print(
