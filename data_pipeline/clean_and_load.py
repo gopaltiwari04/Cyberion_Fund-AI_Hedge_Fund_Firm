@@ -7,6 +7,8 @@ import polars as pl
 
 from sqlalchemy import create_engine
 
+from validate_market_data import validate_market_data
+
 
 # ============================================================
 # CONNECTIONS
@@ -254,6 +256,8 @@ def clean_and_load_ticker(ticker):
             "volume",
         ]
     )
+
+    validate_market_data(df_clean, ticker)
 
     print(f"Clean rows: {df_clean.height}")
 
