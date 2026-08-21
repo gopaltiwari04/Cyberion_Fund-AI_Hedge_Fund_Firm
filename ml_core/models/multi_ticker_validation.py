@@ -170,78 +170,39 @@ def calculate_metrics(
 # WALK-FORWARD VALIDATION
 # ============================================================
 
-def walk_forward(
-    model,
-    df,
-):
+
+def walk_forward(model, df):
 
     predictions = []
     actuals = []
+    dates = []
 
     fold_metrics = []
 
     n = len(df)
-
     train_end = INITIAL_TRAIN_SIZE
-
     fold_number = 1
 
     while train_end + PURGE_DAYS < n:
 
-        # ----------------------------------------------------
-        # Training
-        # ----------------------------------------------------
-
-        train_stop = (
-            train_end - PURGE_DAYS
-        )
-
+        train_stop = train_end - PURGE_DAYS
         test_start = train_end
+        test_end = min(test_start + TEST_SIZE, n)
 
-        test_end = min(
-            test_start + TEST_SIZE,
-            n,
-        )
-
-        train_df = df.iloc[
-            :train_stop
-        ]
-
-        test_df = df.iloc[
-            test_start:test_end
-        ]
+        train_df = df.iloc[:train_stop]
+        test_df = df.iloc[test_start:test_end]
 
         if test_df.empty:
             break
 
-        X_train = train_df[
-            FEATURES
-        ]
+        X_train = train_df[FEATURES]
+        y_train = train_df["target_5d"]
 
-        y_train = train_df[
-            "target_5d"
-        ]
+        X_test = test_df[FEATURES]
+        y_test = test_df["target_5d"]
 
-        X_test = test_df[
-            FEATURES
-        ]
-
-        y_test = test_df[
-            "target_5d"
-        ]
-
-        # ----------------------------------------------------
-        # Fit
-        # ----------------------------------------------------
-
-        model.fit(
-            X_train,
-            y_train,
-        )
-
-        preds = model.predict(
-            X_test
-        )
+        model.fit(X_train, y_train)
+        preds = model.predict(X_test)
 
         metrics = calculate_metrics(
             y_test.to_numpy(),
@@ -249,22 +210,15 @@ def walk_forward(
         )
 
         metrics["fold"] = fold_number
+        fold_metrics.append(metrics)
 
-        fold_metrics.append(
-            metrics
-        )
+        predictions.extend(preds)
+        actuals.extend(y_test.to_numpy())
 
-        predictions.extend(
-            preds
-        )
-
-        actuals.extend(
-            y_test.to_numpy()
-        )
+        # Save corresponding test dates
+        dates.extend(test_df["date"].to_numpy())
 
         fold_number += 1
-
-        # Expanding window
         train_end = test_end
 
     overall = calculate_metrics(
@@ -275,72 +229,71 @@ def walk_forward(
     return (
         overall,
         pd.DataFrame(fold_metrics),
+        np.array(actuals),
+        np.array(predictions),
+        np.array(dates),
     )
-
 
 # ============================================================
 # NAIVE BASELINE
 # ============================================================
 
+
 def evaluate_naive(df):
 
     n = len(df)
-
     train_end = INITIAL_TRAIN_SIZE
 
     predictions = []
     actuals = []
+    dates = []
 
     while train_end + PURGE_DAYS < n:
 
-        train_stop = (
-            train_end - PURGE_DAYS
-        )
-
+        train_stop = train_end - PURGE_DAYS
         test_start = train_end
+        test_end = min(test_start + TEST_SIZE, n)
 
-        test_end = min(
-            test_start + TEST_SIZE,
-            n,
-        )
-
-        train_df = df.iloc[
-            :train_stop
-        ]
-
-        test_df = df.iloc[
-            test_start:test_end
-        ]
+        train_df = df.iloc[:train_stop]
+        test_df = df.iloc[test_start:test_end]
 
         if test_df.empty:
             break
 
-        # Mean target observed in training
-        prediction = train_df[
-            "target_5d"
-        ].mean()
+        prediction = train_df["target_5d"].mean()
 
         predictions.extend(
             [prediction] * len(test_df)
         )
 
         actuals.extend(
-            test_df[
-                "target_5d"
-            ].to_numpy()
+            test_df["target_5d"].to_numpy()
         )
+
+        # Save corresponding test dates
+        dates.extend(test_df["date"].to_numpy())
 
         train_end = test_end
 
-    return calculate_metrics(
-        np.array(actuals),
-        np.array(predictions),
+    actuals = np.array(actuals)
+    predictions = np.array(predictions)
+    dates = np.array(dates)
+
+    return (
+        calculate_metrics(
+            actuals,
+            predictions,
+        ),
+        actuals,
+        predictions,
+        dates,
     )
 
 
 # ============================================================
 # RUN ONE TICKER
 # ============================================================
+
 
 def run_ticker(ticker):
 
@@ -363,14 +316,14 @@ def run_ticker(ticker):
     )
 
     results = []
+    predictions = []
 
     # ========================================================
     # NAIVE
     # ========================================================
 
-    naive_metrics = evaluate_naive(
-        df
-    )
+    
+    naive_metrics, naive_actuals, naive_predictions, naive_dates = evaluate_naive(df)
 
     results.append({
         "ticker": ticker,
@@ -380,6 +333,22 @@ def run_ticker(ticker):
 
     print("\nNAIVE")
     print(naive_metrics)
+
+    
+    predictions.extend([
+        {
+            "ticker": ticker,
+            "date": date,
+            "model": "Naive",
+            "actual": actual,
+            "prediction": pred,
+        }
+        for date, actual, pred in zip(
+            naive_dates,
+            naive_actuals,
+            naive_predictions,
+        )
+    ])
 
     # ========================================================
     # RIDGE
@@ -400,7 +369,8 @@ def run_ticker(ticker):
         run_name=f"{ticker}_Ridge"
     ):
 
-        metrics, folds = walk_forward(
+        
+        metrics, folds, ridge_actuals, ridge_predictions, ridge_dates = walk_forward(
             ridge,
             df,
         )
@@ -431,6 +401,22 @@ def run_ticker(ticker):
     print("\nRIDGE")
     print(metrics)
 
+    
+    predictions.extend([
+        {
+            "ticker": ticker,
+            "date": date,
+            "model": "Ridge",
+            "actual": actual,
+            "prediction": pred,
+        }
+        for date, actual, pred in zip(
+            ridge_dates,
+            ridge_actuals,
+            ridge_predictions,
+        )
+    ])
+
     # ========================================================
     # RANDOM FOREST
     # ========================================================
@@ -447,7 +433,7 @@ def run_ticker(ticker):
         run_name=f"{ticker}_RandomForest"
     ):
 
-        metrics, folds = walk_forward(
+        metrics, folds, rf_actuals, rf_predictions, rf_dates = walk_forward(
             rf,
             df,
         )
@@ -480,7 +466,25 @@ def run_ticker(ticker):
     print("\nRANDOM FOREST")
     print(metrics)
 
-    return results
+    
+    predictions.extend([
+        {
+            "ticker": ticker,
+            "date": date,
+            "model": "RandomForest",
+            "actual": actual,
+            "prediction": pred,
+        }
+        for date, actual, pred in zip(
+            rf_dates,
+            rf_actuals,
+            rf_predictions,
+        )
+    ])
+
+    return results, predictions
+
+    
 
 
 # ============================================================
@@ -494,17 +498,22 @@ def main():
     print("=" * 70)
 
     all_results = []
+    all_predictions = []
 
     for ticker in TICKERS:
 
         try:
 
-            results = run_ticker(
+            results, predictions = run_ticker(
                 ticker
             )
 
             all_results.extend(
                 results
+            )
+
+            all_predictions.extend(
+                predictions
             )
 
         except Exception as e:
@@ -583,9 +592,48 @@ def main():
         "multi_ticker_results.csv"
     )
 
-    results_df.to_csv(
-        output_path,
+    prediction_df = pd.DataFrame(all_predictions)
+
+    prediction_df["date"] = pd.to_datetime(
+        prediction_df["date"]
+    ).dt.strftime("%Y-%m-%d")
+
+    prediction_df = prediction_df.sort_values(
+        ["ticker", "date", "model"]
+    ).reset_index(drop=True)
+
+    prediction_path = (
+        "ml_core/models/"
+        "walk_forward_predictions.csv"
+    )
+
+    prediction_df.to_csv(
+        prediction_path,
         index=False,
+    )
+
+    print(
+        f"Saved predictions to: "
+        f"{prediction_path}"
+    )
+
+    prediction_df = pd.DataFrame(
+        all_predictions
+    )
+
+    prediction_path = (
+        "ml_core/models/"
+        "walk_forward_predictions.csv"
+    )
+
+    prediction_df.to_csv(
+        prediction_path,
+        index=False,
+    )
+
+    print(
+        f"Saved predictions to: "
+        f"{prediction_path}"
     )
 
     print(
