@@ -1,8 +1,34 @@
-from sqlalchemy import Column, Integer, String, Float, Date, create_engine
+from sqlalchemy import Column, Integer, String, Float, Date, UniqueConstraint, create_engine
 from sqlalchemy.orm import declarative_base
 
 # 1. Define Base ONCE at the top
 Base = declarative_base()
+
+class FeatureStore(Base):
+    __tablename__ = "feature_store"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    ticker = Column(String, index=True, nullable=False)
+    date = Column(Date, index=True, nullable=False)
+
+    return_1d = Column(Float)
+    return_5d = Column(Float)
+
+    rsi_14 = Column(Float)
+    macd = Column(Float)
+
+    volatility_20d = Column(Float)
+
+    regime = Column(Integer)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "ticker",
+            "date",
+            name="_ticker_date_uc"
+        ),
+    )
 
 # 2. Your Week 1 Table
 class Asset(Base):
