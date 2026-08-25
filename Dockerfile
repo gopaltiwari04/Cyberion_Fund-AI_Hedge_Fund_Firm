@@ -10,4 +10,8 @@ RUN pip install --no-cache-dir \
     polars \
     sqlalchemy \
     psycopg2-binary \
-    great-expectations==1.21.0
+    great-expectations==1.21.0 \
+    newsapi-python \
+    sec-edgar-downloader \
+    beautifulsoup4 \
+    sentence-transformers

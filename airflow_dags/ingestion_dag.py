@@ -66,3 +66,33 @@ with DAG(
     # --------------------------------------------------------
 
     ingest_macro_data >> clean_data
+
+        # --------------------------------------------------------
+    # 3. Ingest financial news + SEC filings
+    # --------------------------------------------------------
+
+    ingest_text = BashOperator(
+        task_id="ingest_financial_text",
+        bash_command=(
+            "cd /opt/airflow/dags/project && "
+            "python ml_core/nlp/ingest_text.py"
+        ),
+    )
+
+    # --------------------------------------------------------
+    # 4. Clean financial text + generate embeddings
+    # --------------------------------------------------------
+
+    process_text = BashOperator(
+        task_id="process_and_embed_text",
+        bash_command=(
+            "cd /opt/airflow/dags/project && "
+            "python ml_core/nlp/process_text.py"
+        ),
+    )
+
+    # --------------------------------------------------------
+    # Dependency
+    # --------------------------------------------------------
+
+    ingest_macro_data >> clean_data >> ingest_text >> process_text

@@ -15,6 +15,10 @@ from sqlalchemy import create_engine, text
 
 load_dotenv()
 
+# ------------------------------------------------------------
+# Environment configuration
+# ------------------------------------------------------------
+
 DB_URL = os.getenv(
     "DB_URL",
     "postgresql://quant_user:quant_password@localhost:5432/quant_db"
@@ -24,23 +28,32 @@ NEWSAPI_KEY = os.getenv("NEWSAPI_KEY")
 SEC_USER_AGENT = os.getenv("SEC_USER_AGENT")
 
 if not NEWSAPI_KEY:
-    raise RuntimeError(
-        "NEWSAPI_KEY is missing. Add it to your .env file."
-    )
+    raise RuntimeError("NEWSAPI_KEY environment variable is not set")
 
 if not SEC_USER_AGENT:
-    raise RuntimeError(
-        "SEC_USER_AGENT is missing. Add it to your .env file."
-    )
-
+    raise RuntimeError("SEC_USER_AGENT environment variable is not set")
 
 engine = create_engine(DB_URL)
 
+# ------------------------------------------------------------
+# Initialize APIs
+# ------------------------------------------------------------
+
 newsapi = NewsApiClient(api_key=NEWSAPI_KEY)
 
+# SEC Downloader expects:
+# CompanyName ContactEmail
+sec_parts = SEC_USER_AGENT.split(" ", 1)
+
+if len(sec_parts) != 2:
+    raise RuntimeError(
+        "SEC_USER_AGENT must be formatted as: "
+        "'CompanyName ContactEmail'"
+    )
+
 dl = Downloader(
-    "QuantPlatform",
-    SEC_USER_AGENT.split(" ", 1)[-1],
+    sec_parts[0],
+    sec_parts[1],
     "./sec_data"
 )
 
