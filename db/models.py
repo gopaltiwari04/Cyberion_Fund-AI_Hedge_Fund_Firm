@@ -41,6 +41,8 @@ class FeatureStore(Base):
 
     regime = Column(Integer)
 
+    sentiment_score = Column(Float, default=0.0)
+
     __table_args__ = (
         UniqueConstraint(
             "ticker",

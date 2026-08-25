@@ -12,7 +12,14 @@ from sqlalchemy import create_engine, text
 # CONFIG
 # ============================================================
 
-DB_URL = "postgresql://quant_user:quant_password@localhost:5432/quant_db"
+import os
+from sqlalchemy import create_engine
+
+DB_URL = os.getenv(
+    "DB_URL",
+    "postgresql://quant_user:quant_password@localhost:5432/quant_db"
+)
+
 engine = create_engine(DB_URL)
 
 MODEL_NAME = "all-MiniLM-L6-v2"

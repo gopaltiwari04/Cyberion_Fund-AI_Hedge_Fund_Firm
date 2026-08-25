@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir \
     sqlalchemy \
     psycopg2-binary \
     great-expectations==1.21.0 \
-    newsapi-python \
-    sec-edgar-downloader \
-    beautifulsoup4 \
-    sentence-transformers
+    transformers \
+    torch \
+    scipy \
+    redis
