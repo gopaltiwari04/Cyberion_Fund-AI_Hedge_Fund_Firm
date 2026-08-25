@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 
+
 default_args = {
     "owner": "quant_dev",
     "depends_on_past": False,
@@ -16,7 +17,7 @@ default_args = {
 with DAG(
     "daily_market_data_ingestion",
     default_args=default_args,
-    description="Ingests macro data, then cleans and loads market data",
+    description="Ingests market data, financial text, embeddings, and sentiment",
     schedule_interval="0 18 * * 1-5",
     start_date=datetime(2023, 1, 1, tzinfo=timezone.utc),
     catchup=False,
@@ -62,21 +63,25 @@ with DAG(
     )
 
     # --------------------------------------------------------
-    # Dependency
-    # --------------------------------------------------------
-
-    ingest_macro_data >> clean_data
-
-        # --------------------------------------------------------
     # 3. Ingest financial news + SEC filings
     # --------------------------------------------------------
 
     ingest_text = BashOperator(
         task_id="ingest_financial_text",
+
         bash_command=(
             "cd /opt/airflow/dags/project && "
             "python ml_core/nlp/ingest_text.py"
         ),
+
+        env={
+            "DB_URL": (
+                "postgresql://quant_user:quant_password"
+                "@postgres:5432/quant_db"
+            ),
+            "REDIS_HOST": "redis",
+            "REDIS_PORT": "6379",
+        },
     )
 
     # --------------------------------------------------------
@@ -85,14 +90,47 @@ with DAG(
 
     process_text = BashOperator(
         task_id="process_and_embed_text",
+
         bash_command=(
             "cd /opt/airflow/dags/project && "
             "python ml_core/nlp/process_text.py"
         ),
+
+        env={
+            "DB_URL": (
+                "postgresql://quant_user:quant_password"
+                "@postgres:5432/quant_db"
+            ),
+        },
     )
 
     # --------------------------------------------------------
-    # Dependency
+    # 5. FinBERT sentiment analysis
     # --------------------------------------------------------
 
-    ingest_macro_data >> clean_data >> ingest_text >> process_text
+    score_sentiment = BashOperator(
+        task_id="score_financial_sentiment",
+
+        bash_command=(
+            "cd /opt/airflow/dags/project && "
+            "python ml_core/nlp/sentiment_analyzer.py"
+        ),
+
+        env={
+            "DB_URL": (
+                "postgresql://quant_user:quant_password"
+                "@postgres:5432/quant_db"
+            ),
+
+            "REDIS_HOST": "redis",
+            "REDIS_PORT": "6379",
+        },
+    )
+
+    # --------------------------------------------------------
+    # DAG DEPENDENCIES
+    # --------------------------------------------------------
+
+    ingest_macro_data >> clean_data
+
+    clean_data >> ingest_text >> process_text >> score_sentiment
