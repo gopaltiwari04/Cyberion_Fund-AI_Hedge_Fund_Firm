@@ -1,8 +1,27 @@
-from sqlalchemy import Column, Date, Float, Integer, String, UniqueConstraint
+from sqlalchemy import Column, Date, Float, Integer, String, UniqueConstraint, DateTime, Text
 from sqlalchemy.orm import declarative_base
+
 
 # 1. Define Base ONCE at the top
 Base = declarative_base()
+
+class FinancialText(Base):
+    __tablename__ = "financial_text"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    ticker = Column(String, index=True, nullable=False)
+    source = Column(String, nullable=False)  # news / sec_8k
+
+    published_at = Column(DateTime, index=True, nullable=False)
+
+    title = Column(String)
+    raw_text = Column(Text)
+    clean_text = Column(Text)
+
+    # Keep this nullable for now.
+    # We'll populate it once the embedding pipeline runs.
+    embedding = Column(Text, nullable=True)
 
 class FeatureStore(Base):
     __tablename__ = "feature_store"
