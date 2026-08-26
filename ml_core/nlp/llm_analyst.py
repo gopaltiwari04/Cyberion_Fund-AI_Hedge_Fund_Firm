@@ -1,7 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_postgres import PGVector
 from langchain_core.prompts import PromptTemplate
@@ -18,12 +18,11 @@ DB_URL = os.getenv(
     "postgresql://quant_user:quant_password@localhost:5432/quant_db"
 )
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-if not OPENAI_API_KEY:
+if not GEMINI_API_KEY:
     raise RuntimeError(
-        "OPENAI_API_KEY is not configured. "
-        "Add it to your .env file."
+        "GEMINI_API_KEY is not configured. Add it to your .env file."
     )
 
 COLLECTION_NAME = "sec_filings"
@@ -153,10 +152,10 @@ Content:
 
     print("Sending retrieved context to OpenAI...")
 
-    llm = ChatOpenAI(
-        model="gpt-4o-mini",
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
         temperature=0,
-        api_key=OPENAI_API_KEY,
+        google_api_key=os.getenv("GEMINI_API_KEY"),
     )
 
     prompt = PromptTemplate(
