@@ -1,4 +1,17 @@
 services:
+
+  neo4j:
+    image: neo4j:5
+
+    environment:
+      NEO4J_AUTH: neo4j/quant_password
+
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+
+    volumes:
+      - neo4jdata:/data
   postgres:
     image: pgvector/pgvector:pg15
 
@@ -69,3 +82,4 @@ services:
 volumes:
   pgdata:
   miniodata:
+  neo4jdata:
