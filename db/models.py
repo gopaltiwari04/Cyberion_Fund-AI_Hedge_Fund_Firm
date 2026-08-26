@@ -72,3 +72,32 @@ class MarketData(Base):
     low = Column(Float)
     close = Column(Float)
     volume = Column(Float)
+
+
+    
+class PortfolioAllocation(Base):
+    __tablename__ = "portfolio_allocations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(Date, index=True, nullable=False)
+    strategy_name = Column(String, index=True, nullable=False)
+    ticker = Column(String, index=True, nullable=False)
+
+    weight = Column(Float, nullable=False)
+    expected_return = Column(Float)
+    risk_contribution = Column(Float)
+
+
+class PortfolioRiskMetrics(Base):
+    __tablename__ = "portfolio_risk_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(Date, index=True, nullable=False)
+    strategy_name = Column(String, index=True, nullable=False)
+
+    expected_annual_return = Column(Float)
+    expected_annual_volatility = Column(Float)
+    sharpe_ratio = Column(Float)
+
+    var_95 = Column(Float)
+    cvar_95 = Column(Float)
