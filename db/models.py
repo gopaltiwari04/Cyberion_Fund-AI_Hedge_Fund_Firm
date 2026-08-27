@@ -41,6 +41,33 @@ class FeatureStore(Base):
 
     regime = Column(Integer)
 
+    return_10d = Column(Float)
+    return_20d = Column(Float)
+    return_60d = Column(Float)
+
+    volatility_5d = Column(Float)
+    volatility_60d = Column(Float)
+    atr_14_pct = Column(Float)
+
+    sma_20_distance = Column(Float)
+    sma_50_distance = Column(Float)
+    sma_200_distance = Column(Float)
+
+    drawdown_20d = Column(Float)
+    drawdown_60d = Column(Float)
+
+    volume_change_5d = Column(Float)
+    volume_zscore_20d = Column(Float)
+
+    market_return_5d = Column(Float)
+    relative_return_5d = Column(Float)
+    beta_60d = Column(Float)
+    correlation_spy_60d = Column(Float)
+
+    intraday_range = Column(Float)
+    close_position = Column(Float)
+    gap_return = Column(Float)
+
     sentiment_score = Column(Float, default=0.0)
     degree_centrality = Column(Float, default=0.0)
     pagerank = Column(Float, default=0.0)

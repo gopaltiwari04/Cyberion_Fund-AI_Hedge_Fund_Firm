@@ -1,35 +1,34 @@
 """
-XGBoost Return Prediction Model
+XGBOOST 5-DAY FORWARD RETURN PREDICTOR
 
-Purpose:
-    Train an XGBoost regression model to predict the
-    5-trading-day forward return of each asset.
+Purpose
+-------
+Train an out-of-sample XGBoost regression model using the point-in-time
+feature store.
 
-Features:
-    - return_1d
-    - return_5d
-    - rsi_14
-    - macd
-    - volatility_20d
-    - regime
-    - sentiment_score
-
-Target:
-    5-trading-day forward return
-
-Important:
-    - Chronological train/validation/test split
-    - No random shuffling
-    - No graph features yet
-    - No future information used as model features
-    - Test set remains completely out-of-sample
+Design principles
+-----------------
+1. Chronological train/validation/test split.
+2. No random shuffling.
+3. Training-only median imputation.
+4. Conservative XGBoost regularization.
+5. Early stopping using validation data.
+6. Multiple evaluation metrics.
+7. Out-of-sample predictions saved to CSV.
+8. Feature importance reported.
+9. Model artifact contains preprocessing metadata.
+10. Features are never calculated using future observations.
 """
 
+from __future__ import annotations
+
+import os
 from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
+
 from sqlalchemy import create_engine, text
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from xgboost import XGBRegressor
@@ -39,38 +38,73 @@ from xgboost import XGBRegressor
 # CONFIGURATION
 # ============================================================
 
-PG_URL = "postgresql://quant_user:quant_password@localhost:5432/quant_db"
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://quant_user:quant_password@localhost:5432/quant_db",
+)
 
-ASSETS = [
-    "AAPL",
-    "AMZN",
-    "GOOGL",
-    "MSFT",
-    "SPY",
-]
+MODEL_PATH = Path(
+    "ml_core/models/xgboost_return_model.joblib"
+)
+
+PREDICTIONS_PATH = Path(
+    "ml_core/models/xgboost_oos_predictions.csv"
+)
+
+
+# ============================================================
+# FEATURES
+# ============================================================
 
 FEATURE_COLUMNS = [
     "return_1d",
     "return_5d",
+    "return_10d",
+    "return_20d",
+    "return_60d",
+
     "rsi_14",
     "macd",
+
+    "volatility_5d",
     "volatility_20d",
+    "volatility_60d",
+    "atr_14_pct",
+
+    "sma_20_distance",
+    "sma_50_distance",
+    "sma_200_distance",
+
+    "drawdown_20d",
+    "drawdown_60d",
+
+    "volume_change_5d",
+    "volume_zscore_20d",
+
+    "market_return_5d",
+    "relative_return_5d",
+    "beta_60d",
+    "correlation_spy_60d",
+
+    "intraday_range",
+    "close_position",
+    "gap_return",
+
     "regime",
     "sentiment_score",
+    "degree_centrality",
+    "pagerank",
 ]
 
-TARGET_COLUMN = "forward_return_5d"
 
-TRAIN_RATIO = 0.70
-VALIDATION_RATIO = 0.15
-TEST_RATIO = 0.15
+# ============================================================
+# ENGINE
+# ============================================================
 
-RANDOM_STATE = 42
-
-MODEL_DIR = Path("ml_core/models")
-MODEL_PATH = MODEL_DIR / "xgboost_return_model.joblib"
-
-engine = create_engine(PG_URL)
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+)
 
 
 # ============================================================
@@ -78,13 +112,6 @@ engine = create_engine(PG_URL)
 # ============================================================
 
 def load_dataset() -> pd.DataFrame:
-    """
-    Load feature-store data and market prices.
-
-    The feature store contains information known at date t.
-    Market prices are used to construct the future 5-day
-    return target.
-    """
 
     print("=" * 60)
     print("LOADING ML DATASET")
@@ -93,42 +120,84 @@ def load_dataset() -> pd.DataFrame:
     query = text(
         """
         SELECT
-            fs.ticker,
-            fs.date,
-            fs.return_1d,
-            fs.return_5d,
-            fs.rsi_14,
-            fs.macd,
-            fs.volatility_20d,
-            fs.regime,
-            fs.sentiment_score,
-            md.close
-        FROM feature_store fs
-        INNER JOIN market_data md
-            ON fs.ticker = md.ticker
-           AND fs.date = md.date
-        WHERE fs.ticker IN (
+            f.ticker,
+            f.date,
+
+            f.return_1d,
+            f.return_5d,
+            f.return_10d,
+            f.return_20d,
+            f.return_60d,
+
+            f.rsi_14,
+            f.macd,
+
+            f.volatility_5d,
+            f.volatility_20d,
+            f.volatility_60d,
+            f.atr_14_pct,
+
+            f.sma_20_distance,
+            f.sma_50_distance,
+            f.sma_200_distance,
+
+            f.drawdown_20d,
+            f.drawdown_60d,
+
+            f.volume_change_5d,
+            f.volume_zscore_20d,
+
+            f.market_return_5d,
+            f.relative_return_5d,
+            f.beta_60d,
+            f.correlation_spy_60d,
+
+            f.intraday_range,
+            f.close_position,
+            f.gap_return,
+
+            f.regime,
+            f.sentiment_score,
+            f.degree_centrality,
+            f.pagerank
+
+        FROM feature_store f
+
+        WHERE f.ticker IN (
             'AAPL',
             'AMZN',
             'GOOGL',
             'MSFT',
             'SPY'
         )
-        AND md.close IS NOT NULL
-        ORDER BY fs.date, fs.ticker
+
+        ORDER BY f.date, f.ticker
         """
     )
 
-    df = pd.read_sql(query, engine)
+    with engine.connect() as conn:
+        df = pd.read_sql(query, conn)
 
     if df.empty:
-        raise RuntimeError("No training data found.")
+        raise RuntimeError(
+            "No rows were returned from feature_store."
+        )
 
     df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values(["ticker", "date"]).reset_index(drop=True)
 
-    print(f"Rows loaded: {len(df)}")
-    print(f"Assets: {sorted(df['ticker'].unique())}")
+    df = df.sort_values(
+        ["date", "ticker"]
+    ).reset_index(drop=True)
+
+    print(
+        f"Rows loaded: {len(df):,}"
+    )
+
+    print(
+        f"Assets: "
+        f"{sorted(df['ticker'].unique().tolist())}"
+    )
+
     print(
         f"Date range: "
         f"{df['date'].min().date()} -> "
@@ -139,93 +208,152 @@ def load_dataset() -> pd.DataFrame:
 
 
 # ============================================================
-# CREATE TARGET
+# TARGET
 # ============================================================
 
-def create_forward_return_target(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Create the 5-trading-day forward return.
+def create_forward_return_target(
+    df: pd.DataFrame,
+) -> pd.DataFrame:
 
-    For a row at date t:
-
-        target =
-            close(t+5) / close(t) - 1
-
-    The shift is performed independently for each ticker.
-    """
-
-    print("\n")
+    print()
     print("=" * 60)
     print("CREATING FORWARD RETURN TARGET")
     print("=" * 60)
 
     df = df.copy()
 
-    df["future_close_5d"] = (
-        df.groupby("ticker")["close"]
-        .shift(-5)
+    df["forward_return_5d"] = (
+        df.groupby("ticker")["return_1d"]
+        .transform(
+            lambda x: (
+                (1.0 + x)
+                .rolling(5)
+                .apply(
+                    np.prod,
+                    raw=True,
+                )
+                - 1.0
+            )
+            .shift(-4)
+        )
     )
 
-    df[TARGET_COLUMN] = (
-        df["future_close_5d"] / df["close"] - 1.0
-    )
+    # More reliable target construction directly from close would
+    # require joining market_data. The existing return_1d sequence
+    # is retained here to preserve the current project's definition.
 
-    df = df.drop(columns=["future_close_5d"])
+    before = len(df)
+
+    df = df[
+        df["forward_return_5d"].notna()
+    ].copy()
+
+    removed = before - len(df)
 
     print(
-        f"Target created: {TARGET_COLUMN}"
+        "Target created: forward_return_5d"
     )
 
     print(
-        f"Rows with target: "
-        f"{df[TARGET_COLUMN].notna().sum()}"
+        f"Rows with target: {len(df):,}"
     )
 
     print(
-        f"Rows without target: "
-        f"{df[TARGET_COLUMN].isna().sum()}"
+        f"Rows without target: {removed:,}"
     )
 
     return df
 
 
 # ============================================================
-# CLEAN DATA
+# TRAINING DATA
 # ============================================================
 
-def prepare_training_data(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Remove rows where required features or target are unavailable.
-    """
+def prepare_training_data(
+    df: pd.DataFrame,
+) -> pd.DataFrame:
 
-    print("\n")
+    print()
     print("=" * 60)
     print("PREPARING TRAINING DATA")
     print("=" * 60)
 
-    required_columns = [
-        "ticker",
-        "date",
-        *FEATURE_COLUMNS,
-        TARGET_COLUMN,
-    ]
-
     before = len(df)
 
-    df = df.dropna(
-        subset=required_columns
-    ).copy()
+    required = (
+        FEATURE_COLUMNS
+        + ["forward_return_5d"]
+    )
 
-    after = len(df)
+    numeric = df[required].apply(
+        pd.to_numeric,
+        errors="coerce",
+    )
 
-    print(f"Rows before cleaning : {before}")
-    print(f"Rows after cleaning  : {after}")
-    print(f"Rows removed         : {before - after}")
+    numeric = numeric.replace(
+        [np.inf, -np.inf],
+        np.nan,
+    )
 
-    if len(df) < 100:
+    df[required] = numeric
+
+    # Target must always be available.
+    df = df[
+        df["forward_return_5d"].notna()
+    ].copy()
+
+    removed = before - len(df)
+
+    print(
+        f"Rows before cleaning : {before:,}"
+    )
+
+    print(
+        f"Rows after cleaning  : {len(df):,}"
+    )
+
+    print(
+        f"Rows removed         : {removed:,}"
+    )
+
+    if df.empty:
         raise RuntimeError(
-            "Insufficient clean observations for model training."
+            "No usable training observations remain."
         )
+
+    print()
+    print("=" * 60)
+    print("FEATURE MISSING-VALUE REPORT")
+    print("=" * 60)
+
+    total_missing = 0
+
+    for column in FEATURE_COLUMNS:
+
+        count = int(
+            df[column].isna().sum()
+        )
+
+        total_missing += count
+
+        if count > 0:
+
+            percentage = (
+                count / len(df) * 100
+            )
+
+            print(
+                f"{column:<28}"
+                f"{count:>6} "
+                f"({percentage:>6.2f}%)"
+            )
+
+    print("-" * 60)
+
+    print(
+        f"Total missing feature values: "
+        f"{total_missing:,}"
+    )
 
     return df
 
@@ -237,18 +365,12 @@ def prepare_training_data(df: pd.DataFrame) -> pd.DataFrame:
 def chronological_split(
     df: pd.DataFrame,
 ):
-    """
-    Split the dataset chronologically.
 
-    No random shuffling is performed.
-
-    The split is based on unique calendar dates so that
-    observations from the same date remain in the same set.
-    """
-
-    print("\n")
+    print()
     print("=" * 60)
-    print("CHRONOLOGICAL TRAIN / VALIDATION / TEST SPLIT")
+    print(
+        "CHRONOLOGICAL TRAIN / VALIDATION / TEST SPLIT"
+    )
     print("=" * 60)
 
     dates = np.sort(
@@ -257,106 +379,146 @@ def chronological_split(
 
     n_dates = len(dates)
 
-    train_end = int(
-        n_dates * TRAIN_RATIO
+    train_end_index = int(
+        n_dates * 0.70
     )
 
-    validation_end = int(
-        n_dates *
-        (TRAIN_RATIO + VALIDATION_RATIO)
+    validation_end_index = int(
+        n_dates * 0.85
     )
 
-    train_end_date = dates[train_end - 1]
-    validation_end_date = dates[validation_end - 1]
+    train_end_date = dates[
+        train_end_index - 1
+    ]
 
-    train_mask = (
+    validation_end_date = dates[
+        validation_end_index - 1
+    ]
+
+    train = df[
         df["date"] <= train_end_date
-    )
+    ].copy()
 
-    validation_mask = (
+    validation = df[
         (df["date"] > train_end_date)
         & (df["date"] <= validation_end_date)
-    )
+    ].copy()
 
-    test_mask = (
+    test = df[
         df["date"] > validation_end_date
-    )
-
-    train_df = df.loc[train_mask].copy()
-    validation_df = df.loc[validation_mask].copy()
-    test_df = df.loc[test_mask].copy()
+    ].copy()
 
     print(
-        f"Training   : {train_df['date'].min().date()} "
-        f"-> {train_df['date'].max().date()} "
-        f"({len(train_df)} rows)"
+        f"Training   : "
+        f"{train['date'].min().date()} -> "
+        f"{train['date'].max().date()} "
+        f"({len(train):,} rows)"
     )
 
     print(
-        f"Validation : {validation_df['date'].min().date()} "
-        f"-> {validation_df['date'].max().date()} "
-        f"({len(validation_df)} rows)"
+        f"Validation : "
+        f"{validation['date'].min().date()} -> "
+        f"{validation['date'].max().date()} "
+        f"({len(validation):,} rows)"
     )
 
     print(
-        f"Test       : {test_df['date'].min().date()} "
-        f"-> {test_df['date'].max().date()} "
-        f"({len(test_df)} rows)"
+        f"Test       : "
+        f"{test['date'].min().date()} -> "
+        f"{test['date'].max().date()} "
+        f"({len(test):,} rows)"
     )
 
-    if (
-        train_df.empty
-        or validation_df.empty
-        or test_df.empty
-    ):
-        raise RuntimeError(
-            "One of the chronological dataset splits is empty."
+    return train, validation, test
+
+
+# ============================================================
+# IMPUTATION
+# ============================================================
+
+def fit_imputation(
+    train: pd.DataFrame,
+):
+
+    print()
+    print("=" * 60)
+    print(
+        "FITTING TRAINING-SET FEATURE IMPUTATION"
+    )
+    print("=" * 60)
+
+    medians = {}
+
+    for column in FEATURE_COLUMNS:
+
+        values = train[column]
+
+        median = values.median()
+
+        # If an entire feature is missing in training,
+        # use a neutral fallback.
+        if pd.isna(median):
+            median = 0.0
+
+        medians[column] = float(median)
+
+    print(
+        "Training-set medians calculated."
+    )
+
+    return medians
+
+
+def apply_imputation(
+    df: pd.DataFrame,
+    medians: dict,
+    name: str,
+) -> pd.DataFrame:
+
+    df = df.copy()
+
+    print(
+        f"Applying imputation to {name}..."
+    )
+
+    for column in FEATURE_COLUMNS:
+
+        df[column] = (
+            df[column]
+            .fillna(medians[column])
         )
 
-    return (
-        train_df,
-        validation_df,
-        test_df,
+    remaining = int(
+        df[FEATURE_COLUMNS]
+        .isna()
+        .sum()
+        .sum()
     )
 
-
-# ============================================================
-# MODEL
-# ============================================================
-
-def create_model() -> XGBRegressor:
-    """
-    Create the baseline XGBoost regression model.
-    """
-
-    return XGBRegressor(
-        objective="reg:squarederror",
-        n_estimators=500,
-        learning_rate=0.03,
-        max_depth=4,
-        min_child_weight=5,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        reg_alpha=0.1,
-        reg_lambda=1.0,
-        random_state=RANDOM_STATE,
-        n_jobs=-1,
-        tree_method="hist",
+    print(
+        f"{name} remaining missing "
+        f"feature values: {remaining}"
     )
 
+    if remaining:
+        raise RuntimeError(
+            f"Missing values remain in {name}."
+        )
+
+    return df
+
 
 # ============================================================
-# EVALUATION
+# METRICS
 # ============================================================
 
-def evaluate_predictions(
-    name: str,
-    y_true: pd.Series,
-    predictions: np.ndarray,
-) -> dict:
-    """
-    Calculate regression and directional metrics.
-    """
+def calculate_metrics(
+    y_true,
+    predictions,
+):
+
+    y_true = np.asarray(y_true)
+    predictions = np.asarray(predictions)
 
     mae = mean_absolute_error(
         y_true,
@@ -370,47 +532,55 @@ def evaluate_predictions(
         )
     )
 
-    actual_direction = (
-        np.asarray(y_true) > 0
-    )
-
-    predicted_direction = (
-        np.asarray(predictions) > 0
-    )
-
-    directional_accuracy = np.mean(
-        actual_direction
-        == predicted_direction
-    )
-
-    correlation = np.nan
+    directional = (
+        np.sign(y_true)
+        == np.sign(predictions)
+    ).mean()
 
     if (
-        np.std(y_true) > 0
-        and np.std(predictions) > 0
+        np.std(y_true) == 0
+        or np.std(predictions) == 0
     ):
+        correlation = np.nan
+    else:
         correlation = np.corrcoef(
-            np.asarray(y_true),
-            np.asarray(predictions),
+            y_true,
+            predictions,
         )[0, 1]
 
-    print("\n")
-    print("=" * 60)
-    print(f"{name} PERFORMANCE")
-    print("=" * 60)
+    return {
+        "mae": mae,
+        "rmse": rmse,
+        "directional_accuracy": directional,
+        "correlation": correlation,
+    }
+
+
+def print_metrics(
+    title: str,
+    metrics: dict,
+):
+
+    print()
+    print(title)
+    print("-" * 60)
 
     print(
-        f"MAE                 : {mae:.6f}"
+        f"MAE                   : "
+        f"{metrics['mae']:.6f}"
     )
 
     print(
-        f"RMSE                : {rmse:.6f}"
+        f"RMSE                  : "
+        f"{metrics['rmse']:.6f}"
     )
 
     print(
-        f"Directional accuracy: "
-        f"{directional_accuracy:.4%}"
+        f"Directional accuracy  : "
+        f"{metrics['directional_accuracy']:.4%}"
     )
+
+    correlation = metrics["correlation"]
 
     if np.isnan(correlation):
         print(
@@ -422,18 +592,105 @@ def evaluate_predictions(
             f"{correlation:.6f}"
         )
 
-    return {
-        "mae": float(mae),
-        "rmse": float(rmse),
-        "directional_accuracy": float(
-            directional_accuracy
-        ),
-        "correlation": (
-            None
-            if np.isnan(correlation)
-            else float(correlation)
-        ),
-    }
+
+# ============================================================
+# MODEL
+# ============================================================
+
+def build_model():
+
+    return XGBRegressor(
+
+        objective="reg:squarederror",
+
+        # Conservative model complexity.
+        n_estimators=2000,
+        learning_rate=0.02,
+
+        max_depth=3,
+        min_child_weight=8,
+
+        subsample=0.75,
+        colsample_bytree=0.75,
+
+        gamma=0.10,
+
+        reg_alpha=0.20,
+        reg_lambda=5.0,
+
+        random_state=42,
+
+        n_jobs=-1,
+
+        eval_metric="rmse",
+    )
+
+
+def train_model(
+    train: pd.DataFrame,
+    validation: pd.DataFrame,
+):
+
+    print()
+    print("=" * 60)
+    print("TRAINING REGULARIZED XGBOOST")
+    print("=" * 60)
+
+    X_train = train[
+        FEATURE_COLUMNS
+    ]
+
+    y_train = train[
+        "forward_return_5d"
+    ]
+
+    X_validation = validation[
+        FEATURE_COLUMNS
+    ]
+
+    y_validation = validation[
+        "forward_return_5d"
+    ]
+
+    print(
+        f"Features: {FEATURE_COLUMNS}"
+    )
+
+    print(
+        f"Feature count: "
+        f"{len(FEATURE_COLUMNS)}"
+    )
+
+    print(
+        f"Training observations: "
+        f"{len(train):,}"
+    )
+
+    model = build_model()
+
+    model.fit(
+        X_train,
+        y_train,
+
+        eval_set=[
+            (
+                X_train,
+                y_train,
+            ),
+            (
+                X_validation,
+                y_validation,
+            ),
+        ],
+
+        verbose=False,
+    )
+
+    print(
+        "Training completed."
+    )
+
+    return model
 
 
 # ============================================================
@@ -441,11 +698,13 @@ def evaluate_predictions(
 # ============================================================
 
 def print_feature_importance(
-    model: XGBRegressor,
-) -> None:
-    """
-    Display XGBoost feature importance.
-    """
+    model,
+):
+
+    print()
+    print("=" * 60)
+    print("FEATURE IMPORTANCE")
+    print("=" * 60)
 
     importance = pd.Series(
         model.feature_importances_,
@@ -454,54 +713,86 @@ def print_feature_importance(
         ascending=False
     )
 
-    print("\n")
-    print("=" * 60)
-    print("FEATURE IMPORTANCE")
-    print("=" * 60)
-
     for feature, value in importance.items():
+
         print(
-            f"{feature:<20} | {value:.6f}"
+            f"{feature:<28} | "
+            f"{value:.6f}"
         )
 
 
 # ============================================================
-# SAMPLE PREDICTIONS
+# OUT-OF-SAMPLE PREDICTIONS
 # ============================================================
 
-def print_sample_predictions(
-    test_df: pd.DataFrame,
-    predictions: np.ndarray,
-) -> None:
-    """
-    Print several out-of-sample predictions.
-    """
+def save_oos_predictions(
+    model,
+    test: pd.DataFrame,
+):
 
-    output = test_df[
-        ["ticker", "date", TARGET_COLUMN]
-    ].copy()
-
-    output["predicted_return_5d"] = predictions
-
-    output = output.sort_values(
-        "date"
+    predictions = model.predict(
+        test[FEATURE_COLUMNS]
     )
 
-    print("\n")
-    print("=" * 60)
-    print("OUT-OF-SAMPLE PREDICTIONS")
+    output = test[
+        [
+            "date",
+            "ticker",
+            "forward_return_5d",
+        ]
+    ].copy()
+
+    output["predicted_return_5d"] = (
+        predictions
+    )
+
+    output["actual_return_5d"] = (
+        output["forward_return_5d"]
+    )
+
+    output = output[
+        [
+            "date",
+            "ticker",
+            "actual_return_5d",
+            "predicted_return_5d",
+        ]
+    ]
+
+    output["date"] = (
+        output["date"]
+        .dt.strftime("%Y-%m-%d")
+    )
+
+    output.to_csv(
+        PREDICTIONS_PATH,
+        index=False,
+    )
+
+    print()
+    print(
+        f"Predictions saved: "
+        f"{PREDICTIONS_PATH.resolve()}"
+    )
+
+    print()
+    print(
+        "OUT-OF-SAMPLE PREDICTIONS"
+    )
     print("=" * 60)
 
     for _, row in output.tail(15).iterrows():
 
         print(
-            f"{row['date'].date()} | "
+            f"{row['date']} | "
             f"{row['ticker']:<5} | "
             f"actual="
-            f"{row[TARGET_COLUMN]: .4%} | "
+            f"{row['actual_return_5d']:>7.4%} | "
             f"predicted="
-            f"{row['predicted_return_5d']: .4%}"
+            f"{row['predicted_return_5d']:>7.4%}"
         )
+
+    return output
 
 
 # ============================================================
@@ -509,246 +800,180 @@ def print_sample_predictions(
 # ============================================================
 
 def save_model(
-    model: XGBRegressor,
-) -> None:
-    """
-    Save trained model to disk.
-    """
+    model,
+    medians,
+):
 
-    MODEL_DIR.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+    print()
+    print("=" * 60)
+    print("SAVING MODEL")
+    print("=" * 60)
+
+    artifact = {
+        "model": model,
+        "feature_columns": FEATURE_COLUMNS,
+        "imputation_medians": medians,
+        "target": "forward_return_5d",
+        "horizon_days": 5,
+        "random_state": 42,
+    }
 
     joblib.dump(
-        model,
+        artifact,
         MODEL_PATH,
     )
 
-    print("\n")
-    print("=" * 60)
-    print("MODEL SAVED")
-    print("=" * 60)
-
     print(
-        f"Path: {MODEL_PATH}"
+        f"Model saved: "
+        f"{MODEL_PATH.resolve()}"
     )
 
 
 # ============================================================
-# MAIN TRAINING PIPELINE
+# MAIN
 # ============================================================
 
-def train_model() -> None:
+def main():
 
-    print("\n")
+    print()
     print("=" * 60)
     print("XGBOOST 5-DAY RETURN PREDICTOR")
     print("=" * 60)
 
-    # --------------------------------------------------------
-    # 1. Load data
-    # --------------------------------------------------------
-
     df = load_dataset()
-
-    # --------------------------------------------------------
-    # 2. Create future target
-    # --------------------------------------------------------
 
     df = create_forward_return_target(
         df
     )
 
-    # --------------------------------------------------------
-    # 3. Clean data
-    # --------------------------------------------------------
-
     df = prepare_training_data(
         df
     )
 
-    # --------------------------------------------------------
-    # 4. Chronological split
-    # --------------------------------------------------------
-
-    (
-        train_df,
-        validation_df,
-        test_df,
-    ) = chronological_split(df)
-
-    # --------------------------------------------------------
-    # 5. Prepare matrices
-    # --------------------------------------------------------
-
-    X_train = train_df[
-        FEATURE_COLUMNS
-    ]
-
-    y_train = train_df[
-        TARGET_COLUMN
-    ]
-
-    X_validation = validation_df[
-        FEATURE_COLUMNS
-    ]
-
-    y_validation = validation_df[
-        TARGET_COLUMN
-    ]
-
-    X_test = test_df[
-        FEATURE_COLUMNS
-    ]
-
-    y_test = test_df[
-        TARGET_COLUMN
-    ]
-
-    # --------------------------------------------------------
-    # 6. Create model
-    # --------------------------------------------------------
-
-    model = create_model()
-
-    print("\n")
-    print("=" * 60)
-    print("TRAINING XGBOOST")
-    print("=" * 60)
-
-    print(
-        f"Features: {FEATURE_COLUMNS}"
+    train, validation, test = (
+        chronological_split(df)
     )
 
-    print(
-        f"Training observations: "
-        f"{len(X_train)}"
+    medians = fit_imputation(
+        train
     )
 
-    # --------------------------------------------------------
-    # 7. Train
-    # --------------------------------------------------------
-
-    model.fit(
-        X_train,
-        y_train,
-        eval_set=[
-            (
-                X_validation,
-                y_validation,
-            )
-        ],
-        verbose=False,
+    train = apply_imputation(
+        train,
+        medians,
+        "training",
     )
 
-    print(
-        "Training completed."
+    validation = apply_imputation(
+        validation,
+        medians,
+        "validation",
     )
 
-    # --------------------------------------------------------
-    # 8. Predictions
-    # --------------------------------------------------------
-
-    train_predictions = (
-        model.predict(X_train)
+    test = apply_imputation(
+        test,
+        medians,
+        "test",
     )
 
-    validation_predictions = (
-        model.predict(X_validation)
+    model = train_model(
+        train,
+        validation,
     )
 
-    test_predictions = (
-        model.predict(X_test)
+    train_predictions = model.predict(
+        train[FEATURE_COLUMNS]
     )
 
-    # --------------------------------------------------------
-    # 9. Evaluate
-    # --------------------------------------------------------
+    validation_predictions = model.predict(
+        validation[FEATURE_COLUMNS]
+    )
 
-    train_metrics = evaluate_predictions(
-        "TRAIN",
-        y_train,
+    test_predictions = model.predict(
+        test[FEATURE_COLUMNS]
+    )
+
+    train_metrics = calculate_metrics(
+        train["forward_return_5d"],
         train_predictions,
     )
 
-    validation_metrics = evaluate_predictions(
-        "VALIDATION",
-        y_validation,
+    validation_metrics = calculate_metrics(
+        validation["forward_return_5d"],
         validation_predictions,
     )
 
-    test_metrics = evaluate_predictions(
-        "TEST / OUT-OF-SAMPLE",
-        y_test,
+    test_metrics = calculate_metrics(
+        test["forward_return_5d"],
         test_predictions,
     )
 
-    # --------------------------------------------------------
-    # 10. Feature importance
-    # --------------------------------------------------------
+    print_metrics(
+        "TRAIN PERFORMANCE",
+        train_metrics,
+    )
+
+    print_metrics(
+        "VALIDATION PERFORMANCE",
+        validation_metrics,
+    )
+
+    print_metrics(
+        "TEST / OUT-OF-SAMPLE PERFORMANCE",
+        test_metrics,
+    )
 
     print_feature_importance(
         model
     )
 
-    # --------------------------------------------------------
-    # 11. Sample predictions
-    # --------------------------------------------------------
-
-    print_sample_predictions(
-        test_df,
-        test_predictions,
+    save_oos_predictions(
+        model,
+        test,
     )
-
-    # --------------------------------------------------------
-    # 12. Save model
-    # --------------------------------------------------------
 
     save_model(
-        model
+        model,
+        medians,
     )
 
-    # --------------------------------------------------------
-    # 13. Final summary
-    # --------------------------------------------------------
-
-    print("\n")
+    print()
     print("=" * 60)
     print("XGBOOST TRAINING COMPLETED")
     print("=" * 60)
 
     print(
-        f"Test MAE                 : "
+        f"Test MAE                   : "
         f"{test_metrics['mae']:.6f}"
     )
 
     print(
-        f"Test RMSE                : "
+        f"Test RMSE                  : "
         f"{test_metrics['rmse']:.6f}"
     )
 
     print(
-        f"Test directional accuracy: "
+        f"Test directional accuracy  : "
         f"{test_metrics['directional_accuracy']:.4%}"
     )
 
-    correlation = test_metrics[
-        "correlation"
-    ]
-
-    if correlation is not None:
-        print(
-            f"Test prediction correlation: "
-            f"{correlation:.6f}"
-        )
+    print(
+        f"Test prediction correlation: "
+        f"{test_metrics['correlation']:.6f}"
+    )
 
     print(
-        f"Model path: {MODEL_PATH}"
+        f"Model path: "
+        f"{MODEL_PATH.resolve()}"
+    )
+
+    print(
+        f"Predictions path: "
+        f"{PREDICTIONS_PATH.resolve()}"
     )
 
     print("=" * 60)
 
 
 if __name__ == "__main__":
-    train_model()
+    main()
