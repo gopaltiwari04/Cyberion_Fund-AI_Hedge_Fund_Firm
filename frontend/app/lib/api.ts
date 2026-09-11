@@ -1,4 +1,4 @@
-import type { HealthResponse, PortfolioResponse, RiskResponse } from "../types";
+import type { HealthResponse, MarketHistoryResponse, MarketsResponse, PortfolioResponse, RiskResponse } from "../types";
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(path, { cache: "no-store" });
@@ -10,4 +10,6 @@ export const api = {
   health: () => getJson<HealthResponse>("/api/health"),
   portfolio: () => getJson<PortfolioResponse>("/api/portfolio"),
   risk: () => getJson<RiskResponse>("/api/risk"),
+  markets: () => getJson<MarketsResponse>("/api/markets"),
+  marketHistory: (ticker: string) => getJson<MarketHistoryResponse>(`/api/markets/${encodeURIComponent(ticker)}/history`),
 };

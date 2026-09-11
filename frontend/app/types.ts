@@ -25,3 +25,42 @@ export interface RiskResponse {
   var_95: number | null;
   cvar_95: number | null;
 }
+
+export interface MarketSnapshot {
+  ticker: string;
+  date: string;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  volume: number | null;
+  return_1d: number | null;
+  return_5d: number | null;
+  rsi_14: number | null;
+  macd: number | null;
+  volatility_20d: number | null;
+  regime: number | null;
+  relative_return_5d: number | null;
+  beta_60d: number | null;
+  correlation_spy_60d: number | null;
+}
+
+export interface MarketsResponse {
+  date: string | null;
+  markets: MarketSnapshot[];
+}
+
+export interface MarketHistoryPoint {
+  date: string;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  volume: number | null;
+}
+
+export interface MarketHistoryResponse {
+  ticker: string;
+  days: number;
+  history: MarketHistoryPoint[];
+}
