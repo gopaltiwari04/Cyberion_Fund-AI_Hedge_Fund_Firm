@@ -1,6 +1,3 @@
-You're right. Here's the **entire README in ONE single copy-paste block**. Just copy everything inside this block into `README.md`.
-
-````markdown
 # AI Hedge Fund Firm
 
 An end-to-end quantitative investment platform designed to combine automated financial data ingestion, machine learning, portfolio optimization, explainable AI, qualitative financial research, and institutional-grade backtesting.
