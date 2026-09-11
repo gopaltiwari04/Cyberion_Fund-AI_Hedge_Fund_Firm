@@ -53,3 +53,29 @@ button, a { font: inherit; } a { color: inherit; text-decoration: none; }
 @media (max-width: 900px) { .sidebar { width: 72px; padding: 22px 10px; } .brand { margin: 0 auto 56px; } .brand-name, .nav-label, .nav-item span:not(.nav-icon), .sidebar-footer { display: none; } .nav-item { justify-content: center; padding: 13px 0; } .main-content { padding: 0 25px 40px; } }
 @media (max-width: 680px) { .main-content { padding: 0 16px 32px; } .topbar { min-height: 70px; } .topbar-right { gap: 12px; } .date-stamp { display: none; } .content-header { padding: 30px 0 23px; display: block; } .as-of { display: block; margin-top: 19px; } .metric-grid { grid-template-columns: 1fr; } .metric-card { min-height: 112px; } .dashboard-grid { grid-template-columns: 1fr; } .system-body { grid-template-columns: 1fr; } .section-heading h2 { font-size: 16px; } .holdings-table th, .holdings-table td { padding-left: 16px; padding-right: 16px; } .allocation-visual { margin-left: 16px; margin-right: 16px; } }
 @media (max-width: 680px) { .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 20; width: min(82vw, 280px); padding: 22px 18px; transform: translateX(-100%); transition: transform .22s ease; background: var(--background); } .sidebar.sidebar-open { transform: translateX(0); } .sidebar-open .brand-name, .sidebar-open .nav-label, .sidebar-open .nav-item span:not(.nav-icon), .sidebar-open .sidebar-footer { display: initial; } .sidebar-open .nav-item { justify-content: flex-start; padding: 11px 12px; } .sidebar-open .close-menu { display: block; font-size: 24px; } .menu-toggle { display: block; margin-right: 14px; font-size: 18px; } .topbar { justify-content: flex-start; } .menu-backdrop { position: fixed; inset: 0; z-index: 10; border: 0; background: #0009; } .portfolio-page-grid { grid-template-columns: 1fr; } .portfolio-meta { grid-template-columns: 1fr; } }
+
+.markets-overview-panel { margin-top: 2px; }
+.markets-table { min-width: 920px; }
+.markets-table tbody tr { cursor: pointer; transition: background .2s ease; }
+.markets-table tbody tr:hover, .markets-table tbody tr.selected-row { background: var(--surface-raised); }
+.markets-table td, .markets-table th { padding-left: 18px; padding-right: 18px; }
+.markets-table td:first-child, .markets-table th:first-child { padding-left: 25px; }
+.markets-table td:last-child, .markets-table th:last-child { padding-right: 25px; }
+.price-cell { color: var(--text) !important; font-variant-numeric: tabular-nums; }
+.signal-positive { color: var(--green) !important; }
+.signal-negative { color: var(--red) !important; }
+.signal-neutral { color: var(--muted) !important; }
+.markets-skeleton { padding: 1px 0 10px; }
+.markets-detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 18px; margin-top: 18px; }
+.ticker-select { border: 1px solid var(--border); background: var(--surface-raised); color: var(--text); padding: 8px 28px 8px 10px; font-size: 12px; cursor: pointer; }
+.market-price-block { border-top: 1px solid var(--border-soft); padding: 24px 25px 21px; }
+.market-price-block strong { display: block; margin-top: 9px; font-size: 32px; font-weight: 450; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.market-price-block .as-of { display: block; margin-top: 8px; }
+.market-detail-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border-soft); border-top: 1px solid var(--border-soft); }
+.market-detail-metric { min-height: 78px; padding: 16px 18px; background: var(--surface); }
+.market-detail-metric strong { display: block; margin-top: 9px; font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.market-chart { height: 318px; padding: 0 16px 18px 4px; }
+.chart-skeleton { height: 318px; margin: 0 25px 23px; }
+
+@media (max-width: 900px) { .markets-detail-grid { grid-template-columns: 1fr; } }
+@media (max-width: 680px) { .markets-table td, .markets-table th { padding-left: 14px; padding-right: 14px; } .markets-table td:first-child, .markets-table th:first-child { padding-left: 16px; } .markets-table td:last-child, .markets-table th:last-child { padding-right: 16px; } .market-detail-grid { grid-template-columns: repeat(2, 1fr); } .market-price-block strong { font-size: 28px; } .market-chart { height: 260px; padding-right: 8px; } .chart-skeleton { height: 260px; margin-left: 16px; margin-right: 16px; } }
