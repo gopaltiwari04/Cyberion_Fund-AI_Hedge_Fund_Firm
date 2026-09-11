@@ -124,9 +124,9 @@ engine = create_engine(
 
 def load_model():
     """
-    Load the trained XGBoost model.
+    Load the trained XGBoost model package and return
+    the actual XGBRegressor estimator.
     """
-
     print()
     print("=" * 60)
     print("LOADING XGBOOST MODEL")
@@ -134,12 +134,37 @@ def load_model():
 
     if not os.path.exists(MODEL_PATH):
         raise FileNotFoundError(
-            f"XGBoost model not found: {MODEL_PATH}"
+            f"Model not found: {MODEL_PATH}"
         )
 
-    model = joblib.load(MODEL_PATH)
+    package = joblib.load(MODEL_PATH)
 
-    print(f"Model loaded: {MODEL_PATH}")
+    if not isinstance(package, dict):
+        raise RuntimeError(
+            f"Unexpected model format: {type(package).__name__}"
+        )
+
+    if "model" not in package:
+        raise RuntimeError(
+            f"Model package does not contain 'model'. "
+            f"Available keys: {list(package.keys())}"
+        )
+
+    model = package["model"]
+
+    if not hasattr(model, "predict"):
+        raise RuntimeError(
+            f"Invalid estimator inside model package: "
+            f"{type(model).__name__}"
+        )
+
+    print(
+        f"Model loaded: {MODEL_PATH}"
+    )
+
+    print(
+        f"Estimator type: {type(model).__name__}"
+    )
 
     return model
 
