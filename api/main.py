@@ -1,5 +1,6 @@
 import csv
 import math
+import os
 from collections import defaultdict
 from pathlib import Path as FilePath
 
@@ -9,7 +10,10 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
-DATABASE_URL = "postgresql://quant_user:quant_password@localhost:5432/quant_db"
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://quant_user:quant_password@localhost:5432/quant_db",
+)
 
 engine = create_engine(DATABASE_URL)
 
