@@ -79,3 +79,35 @@ button, a { font: inherit; } a { color: inherit; text-decoration: none; }
 
 @media (max-width: 900px) { .markets-detail-grid { grid-template-columns: 1fr; } }
 @media (max-width: 680px) { .markets-table td, .markets-table th { padding-left: 14px; padding-right: 14px; } .markets-table td:first-child, .markets-table th:first-child { padding-left: 16px; } .markets-table td:last-child, .markets-table th:last-child { padding-right: 16px; } .market-detail-grid { grid-template-columns: repeat(2, 1fr); } .market-price-block strong { font-size: 28px; } .market-chart { height: 260px; padding-right: 8px; } .chart-skeleton { height: 260px; margin-left: 16px; margin-right: 16px; } }
+
+.research-status-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); gap: 18px; margin-bottom: 18px; }
+.research-status-panel { min-height: 0; }
+.research-status-list { border-top: 1px solid var(--border-soft); }
+.research-status-line { display: grid; grid-template-columns: 10px 1fr auto; gap: 9px; align-items: center; padding: 15px 25px; border-bottom: 1px solid var(--border-soft); color: var(--muted); font-size: 12px; }
+.research-status-line strong { color: var(--text); font-size: 12px; font-weight: 500; }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; }
+.status-dot-live { background: var(--green); box-shadow: 0 0 0 3px #76c7a01c; }
+.status-dot-error { background: var(--red); box-shadow: 0 0 0 3px #d47d751c; }
+.research-disclosure { border-left: 2px solid var(--green); padding: 20px 24px; background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.research-disclosure p { max-width: 420px; color: var(--muted); font-size: 12px; line-height: 1.6; margin: 10px 0 0; }
+.research-section-heading { margin: 0 0 14px; }
+.research-metric-grid { grid-template-columns: repeat(4, 1fr); }
+.research-panel { margin-top: 18px; }
+.evaluation-panel { margin-top: 18px; }
+.research-metric-list { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border-soft); border-top: 1px solid var(--border-soft); }
+.research-metric-list > div { min-height: 112px; padding: 20px 25px; background: var(--surface); }
+.research-metric-list strong { display: block; margin-top: 14px; font-size: 24px; font-weight: 450; letter-spacing: -.025em; font-variant-numeric: tabular-nums; }
+.research-lower-grid { display: grid; grid-template-columns: minmax(300px, .85fr) minmax(0, 1.15fr); gap: 18px; }
+.dataset-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--border-soft); border-top: 1px solid var(--border-soft); }
+.dataset-list > div { min-height: 71px; padding: 15px 20px; background: var(--surface); }
+.dataset-list span { color: var(--muted); font-size: 11px; }
+.dataset-list strong { display: block; color: var(--text); margin-top: 8px; font-size: 13px; font-weight: 500; }
+.panel-note { color: var(--faint); font-size: 11px; line-height: 1.5; margin: 17px 25px 22px; }
+.research-chart { height: 320px; padding: 0 16px 18px 4px; }
+.feature-panel { margin-bottom: 18px; }
+.feature-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--border-soft); border-top: 1px solid var(--border-soft); }
+.feature-list span { min-height: 43px; padding: 13px 18px; color: var(--muted); background: var(--surface); font-family: var(--font-geist-mono), monospace; font-size: 11px; }
+.feature-skeleton { padding-bottom: 8px; }
+
+@media (max-width: 900px) { .research-status-grid, .research-lower-grid { grid-template-columns: 1fr; } .research-metric-grid, .research-metric-list { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 680px) { .research-metric-grid, .research-metric-list, .feature-list { grid-template-columns: 1fr; } .research-status-line { padding-left: 16px; padding-right: 16px; } .research-disclosure { padding: 18px 16px; } .research-metric-list > div { min-height: 90px; padding: 17px 16px; } .dataset-list > div { padding-left: 16px; padding-right: 16px; } .research-chart { height: 260px; padding-right: 8px; } }

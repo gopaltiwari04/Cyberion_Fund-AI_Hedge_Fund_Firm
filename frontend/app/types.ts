@@ -64,3 +64,38 @@ export interface MarketHistoryResponse {
   days: number;
   history: MarketHistoryPoint[];
 }
+
+export interface ResearchModelResponse {
+  model: {
+    name: string | null;
+    type: string | null;
+    target: string | null;
+    horizon_days: number | null;
+  };
+  dataset: {
+    rows: number | null;
+    target_rows: number | null;
+    train_rows: number | null;
+    validation_rows: number | null;
+    test_rows: number | null;
+  };
+  metrics: {
+    mae: number | null;
+    rmse: number | null;
+    directional_accuracy: number | null;
+    prediction_correlation: number | null;
+  };
+  feature_count: number | null;
+}
+
+export type ResearchPredictionValue = string | number | null;
+
+export interface ResearchPredictionsResponse {
+  available_columns: string[];
+  observations: Array<Record<string, ResearchPredictionValue>>;
+}
+
+export interface ResearchFeaturesResponse {
+  feature_count: number;
+  features: string[];
+}
