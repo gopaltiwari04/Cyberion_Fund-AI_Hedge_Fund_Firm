@@ -16,4 +16,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: {
     strategy: "jwt",
   },
+
+  callbacks: {
+    authorized({ auth, request }) {
+      const isLoggedIn = !!auth?.user;
+      const isLoginPage = request.nextUrl.pathname === "/login";
+
+      // Login page must remain publicly accessible.
+      if (isLoginPage) {
+        return true;
+      }
+
+      // Every other page requires authentication.
+      return isLoggedIn;
+    },
+  },
 });
