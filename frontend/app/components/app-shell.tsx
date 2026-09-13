@@ -23,6 +23,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("popstate", closeMenu);
   }, []);
 
+  if (pathname === "/login") {
+    return <>{children}</>;
+  }
+
   return <div className="app-shell">
     {menuOpen ? <button className="menu-backdrop" aria-label="Close navigation" onClick={() => setMenuOpen(false)} /> : null}
     <aside id="main-navigation" className={`sidebar ${menuOpen ? "sidebar-open" : ""}`} aria-label="Main navigation">
