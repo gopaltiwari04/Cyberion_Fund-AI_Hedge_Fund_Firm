@@ -47,7 +47,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 
-from ml_core.models.cv_utils import purged_time_series_split
+from ml_core.models.cv_utils import purged_time_series_split  # noqa: E402
 
 # ============================================================
 # CONFIGURATION

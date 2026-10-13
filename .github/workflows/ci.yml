@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python lint, unit + integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_USER: quant_user
+          POSTGRES_PASSWORD: quant_password
+          POSTGRES_DB: quant_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U quant_user -d quant_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql://quant_user:quant_password@localhost:5432/quant_test
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements-pipeline.txt
+            requirements-api.txt
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-pipeline.txt
+          pip install -r requirements-api.txt
+          pip install pytest pytest-cov ruff fastembed
+      - name: Ruff
+        run: ruff check .
+      - name: Unit tests
+        run: pytest tests/unit -q --cov --cov-report=term-missing:skip-covered
+      - name: Integration test (migrations -> pipeline -> model -> API -> backtest -> publish)
+        run: pytest tests/integration -q
+
+  api-image:
+    name: API dependency check (Render parity)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install API requirements only and import the app
+        env:
+          ENVIRONMENT: production
+          DATABASE_URL: postgresql://user:pass@localhost:5432/none
+        run: |
+          pip install -r requirements-api.txt
+          python -c "import api.main; print('API imports with requirements-api.txt only')"
+
+  frontend:
+    name: Frontend lint, typecheck, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx eslint .
+      - run: npx tsc --noEmit
+      - run: npm test
+      - name: Build
+        env:
+          AUTH_SECRET: ci-only-not-a-secret
+          AUTH_GOOGLE_ID: ci
+          AUTH_GOOGLE_SECRET: ci
+          FASTAPI_URL: http://127.0.0.1:8000
+        run: npm run build

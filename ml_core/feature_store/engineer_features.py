@@ -60,16 +60,15 @@ from __future__ import annotations
 import json
 import math
 import os
-from datetime import date
-from typing import Dict, List, Optional
+from typing import Optional
 
 import numpy as np
 import pandas as pd
 import redis
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 
 try:
-    import ta
+    import ta  # noqa: F401 - availability check
     from ta.momentum import RSIIndicator
     from ta.trend import MACD
 except ImportError as exc:
@@ -82,31 +81,36 @@ except ImportError as exc:
 # CONFIGURATION
 # ============================================================
 
-PG_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://quant_user:quant_password@localhost:5432/quant_db",
-)
+from common.db import get_engine  # noqa: E402
+from common.runs import track_run  # noqa: E402
+from common.universe import tickers as universe_tickers  # noqa: E402
+from ml_core.feature_store.external_signals import EXTERNAL_FEATURES, add_external_signals  # noqa: E402
 
-REDIS_URL = os.getenv(
-    "REDIS_URL",
-    "redis://localhost:6379/0",
-)
+REDIS_URL = os.getenv("REDIS_URL")
 
-MARKET_TICKERS = ["AAPL", "AMZN", "GOOGL", "MSFT", "SPY"]
+MARKET_TICKERS = universe_tickers()
 
-engine = create_engine(PG_URL)
 
-try:
-    redis_client = redis.Redis.from_url(
-        REDIS_URL,
-        decode_responses=True,
-    )
-    redis_client.ping()
-    REDIS_AVAILABLE = True
-except Exception as exc:
-    print(f"[WARN] Redis unavailable: {exc}")
-    redis_client = None
-    REDIS_AVAILABLE = False
+class _LazyEngine:
+    """Defers connecting until first use so importing this module has no side effects."""
+
+    def __getattr__(self, name):
+        return getattr(get_engine(), name)
+
+
+engine = _LazyEngine()
+
+
+def get_redis_client():
+    if not REDIS_URL:
+        return None
+    try:
+        client = redis.Redis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=3)
+        client.ping()
+        return client
+    except Exception as exc:  # noqa: BLE001 - Redis is an optional cache
+        print(f"[WARN] Redis unavailable: {exc}")
+        return None
 
 
 # ============================================================
@@ -634,126 +638,6 @@ def add_regime_feature(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ============================================================
-# SENTIMENT + GRAPH FEATURES
-# ============================================================
-
-def load_existing_daily_features(
-    dates: List[date],
-    tickers: List[str],
-) -> pd.DataFrame:
-    """
-    Load existing sentiment and graph features from feature_store.
-
-    This allows the new feature engine to preserve already-computed
-    NLP and knowledge-graph features.
-
-    Existing values are not fabricated here.
-
-    Missing sentiment is filled with 0.0 because the current project
-    convention uses zero as the neutral/default sentiment value.
-
-    Graph values are left nullable when no graph value exists.
-    """
-    if not dates or not tickers:
-        return pd.DataFrame(
-            columns=[
-                "ticker",
-                "date",
-                "sentiment_score",
-                "degree_centrality",
-                "pagerank",
-            ]
-        )
-
-    query = text(
-        """
-        SELECT
-            ticker,
-            date,
-            sentiment_score,
-            degree_centrality,
-            pagerank
-        FROM feature_store
-        WHERE ticker = ANY(:tickers)
-          AND date = ANY(:dates)
-        """
-    )
-
-    with engine.connect() as conn:
-        existing = pd.read_sql(
-            query,
-            conn,
-            params={
-                "tickers": tickers,
-                "dates": dates,
-            },
-        )
-
-    if existing.empty:
-        return pd.DataFrame(
-            columns=[
-                "ticker",
-                "date",
-                "sentiment_score",
-                "degree_centrality",
-                "pagerank",
-            ]
-        )
-
-    existing["date"] = pd.to_datetime(
-        existing["date"]
-    ).dt.date
-
-    return existing
-
-
-def merge_existing_features(
-    df: pd.DataFrame,
-) -> pd.DataFrame:
-    """
-    Preserve NLP and graph features already present in feature_store.
-    """
-    df = df.copy()
-
-    dates = sorted(df["date"].dropna().unique().tolist())
-    tickers = sorted(df["ticker"].dropna().unique().tolist())
-
-    existing = load_existing_daily_features(
-        dates=dates,
-        tickers=tickers,
-    )
-
-    if existing.empty:
-        df["sentiment_score"] = 0.0
-        df["degree_centrality"] = np.nan
-        df["pagerank"] = np.nan
-        return df
-
-    # Remove feature columns from df if they happen to exist.
-    for column in [
-        "sentiment_score",
-        "degree_centrality",
-        "pagerank",
-    ]:
-        if column in df.columns:
-            df = df.drop(columns=[column])
-
-    df = df.merge(
-        existing,
-        on=["ticker", "date"],
-        how="left",
-    )
-
-    # Current project convention: neutral sentiment = 0.
-    df["sentiment_score"] = (
-        df["sentiment_score"]
-        .fillna(0.0)
-    )
-
-    return df
-
-
-# ============================================================
 # COMPLETE FEATURE CALCULATION
 # ============================================================
 
@@ -803,8 +687,8 @@ def calculate_features(
     print("[9/9] Point-in-time regime...")
     df = add_regime_feature(df)
 
-    print("Loading existing NLP / graph features...")
-    df = merge_existing_features(df)
+    print("Merging point-in-time macro / news / filing / graph signals...")
+    df = add_external_signals(df)
 
     df = clean_dataframe(df)
 
@@ -845,6 +729,7 @@ FEATURE_COLUMNS = [
     "sentiment_score",
     "degree_centrality",
     "pagerank",
+    *EXTERNAL_FEATURES,
 ]
 
 
@@ -949,134 +834,15 @@ def save_features(
     print("SAVING FEATURES TO POSTGRESQL")
     print("=" * 60)
 
+    columns = ["ticker", "date", *FEATURE_COLUMNS]
     insert_sql = text(
-        """
-        INSERT INTO feature_store (
-            ticker,
-            date,
-
-            return_1d,
-            return_5d,
-            return_10d,
-            return_20d,
-            return_60d,
-
-            rsi_14,
-            macd,
-
-            volatility_5d,
-            volatility_20d,
-            volatility_60d,
-            atr_14_pct,
-
-            sma_20_distance,
-            sma_50_distance,
-            sma_200_distance,
-
-            drawdown_20d,
-            drawdown_60d,
-
-            volume_change_5d,
-            volume_zscore_20d,
-
-            market_return_5d,
-            relative_return_5d,
-            beta_60d,
-            correlation_spy_60d,
-
-            intraday_range,
-            close_position,
-            gap_return,
-
-            regime,
-            sentiment_score,
-
-            degree_centrality,
-            pagerank
-        )
-        VALUES (
-            :ticker,
-            :date,
-
-            :return_1d,
-            :return_5d,
-            :return_10d,
-            :return_20d,
-            :return_60d,
-
-            :rsi_14,
-            :macd,
-
-            :volatility_5d,
-            :volatility_20d,
-            :volatility_60d,
-            :atr_14_pct,
-
-            :sma_20_distance,
-            :sma_50_distance,
-            :sma_200_distance,
-
-            :drawdown_20d,
-            :drawdown_60d,
-
-            :volume_change_5d,
-            :volume_zscore_20d,
-
-            :market_return_5d,
-            :relative_return_5d,
-            :beta_60d,
-            :correlation_spy_60d,
-
-            :intraday_range,
-            :close_position,
-            :gap_return,
-
-            :regime,
-            :sentiment_score,
-
-            :degree_centrality,
-            :pagerank
-        )
+        f"""
+        INSERT INTO feature_store ({", ".join(columns)}, updated_at)
+        VALUES ({", ".join(":" + column for column in columns)}, now())
         ON CONFLICT (ticker, date)
         DO UPDATE SET
-            return_1d = EXCLUDED.return_1d,
-            return_5d = EXCLUDED.return_5d,
-            return_10d = EXCLUDED.return_10d,
-            return_20d = EXCLUDED.return_20d,
-            return_60d = EXCLUDED.return_60d,
-
-            rsi_14 = EXCLUDED.rsi_14,
-            macd = EXCLUDED.macd,
-
-            volatility_5d = EXCLUDED.volatility_5d,
-            volatility_20d = EXCLUDED.volatility_20d,
-            volatility_60d = EXCLUDED.volatility_60d,
-            atr_14_pct = EXCLUDED.atr_14_pct,
-
-            sma_20_distance = EXCLUDED.sma_20_distance,
-            sma_50_distance = EXCLUDED.sma_50_distance,
-            sma_200_distance = EXCLUDED.sma_200_distance,
-
-            drawdown_20d = EXCLUDED.drawdown_20d,
-            drawdown_60d = EXCLUDED.drawdown_60d,
-
-            volume_change_5d = EXCLUDED.volume_change_5d,
-            volume_zscore_20d = EXCLUDED.volume_zscore_20d,
-
-            market_return_5d = EXCLUDED.market_return_5d,
-            relative_return_5d = EXCLUDED.relative_return_5d,
-            beta_60d = EXCLUDED.beta_60d,
-            correlation_spy_60d = EXCLUDED.correlation_spy_60d,
-
-            intraday_range = EXCLUDED.intraday_range,
-            close_position = EXCLUDED.close_position,
-            gap_return = EXCLUDED.gap_return,
-
-            regime = EXCLUDED.regime,
-            sentiment_score = EXCLUDED.sentiment_score,
-
-            degree_centrality = EXCLUDED.degree_centrality,
-            pagerank = EXCLUDED.pagerank
+            {", ".join(f"{column} = EXCLUDED.{column}" for column in FEATURE_COLUMNS)},
+            updated_at = now()
         """
     )
 
@@ -1135,7 +901,8 @@ def update_redis_cache(
 
     Redis is a cache only. PostgreSQL remains the source of truth.
     """
-    if not REDIS_AVAILABLE:
+    redis_client = get_redis_client()
+    if redis_client is None:
         print("[WARN] Redis unavailable. Skipping cache update.")
         return
 
@@ -1269,27 +1036,33 @@ def run_pipeline() -> None:
     print("=" * 60)
     print()
 
-    market_df = load_market_data()
+    with track_run("features", "engineer_features") as ctx:
+        market_df = load_market_data()
 
-    features_df = calculate_features(
-        market_df
-    )
+        features_df = calculate_features(
+            market_df
+        )
 
-    validate_features(
-        features_df
-    )
+        validate_features(
+            features_df
+        )
 
-    print_feature_summary(
-        features_df
-    )
+        print_feature_summary(
+            features_df
+        )
 
-    save_features(
-        features_df
-    )
+        save_features(
+            features_df
+        )
 
-    update_redis_cache(
-        features_df
-    )
+        update_redis_cache(
+            features_df
+        )
+
+        ctx.add_rows(len(features_df))
+        ctx.details["latest_date"] = str(features_df["date"].max())
+        coverage = features_df[EXTERNAL_FEATURES].notna().mean().round(3).to_dict()
+        ctx.details["external_feature_coverage"] = coverage
 
     print()
     print("=" * 60)

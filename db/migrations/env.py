@@ -12,14 +12,22 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-import os
-import sys
+import os  # noqa: E402
+import sys  # noqa: E402
 
 # This tells Alembic to look in your root folder so it can find the 'db' folder
-sys.path.append(os.getcwd()) 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, PROJECT_ROOT)
+
+from common.config import get_settings  # noqa: E402
+
+# DATABASE_URL (or a URL passed by the caller) always wins over alembic.ini so
+# local Docker, CI and Render run migrations against the right database.
+if not config.attributes.get("skip_env_url"):
+    config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
 
 # Import the Base from your models file
-from db.models import Base
+from db.models import Base  # noqa: E402
 
 # Tell Alembic to use your models to generate blueprints
 target_metadata = Base.metadata

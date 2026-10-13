@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "./platform.css";
 import { AppShell } from "./components/app-shell";
 import { AuthProvider } from "./components/auth-provider";
 
@@ -15,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Hedge Fund | Investment Platform",
-  description: "Institutional quantitative investment intelligence.",
+  title: "Cyberion | Quant Research Platform",
+  description: "Quantitative research and risk analytics. Decision support only; not investment advice.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

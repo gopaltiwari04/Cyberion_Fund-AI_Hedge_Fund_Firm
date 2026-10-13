@@ -1,0 +1,40 @@
+# Render Blueprint for the API. The existing service can keep its dashboard
+# settings; this file documents the expected configuration and can be applied
+# with "New > Blueprint" for a fresh environment.
+services:
+  - type: web
+    name: cyberion-api
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements-api.txt
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.8"
+      - key: ENVIRONMENT
+        value: production
+      - key: RUN_MIGRATIONS_ON_STARTUP
+        value: "true"
+      - key: LOG_FORMAT
+        value: json
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cyberion-db
+          property: connectionString
+      - key: INTERNAL_API_SECRET   # must equal the Vercel INTERNAL_API_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: FRONTEND_ORIGINS      # e.g. https://<your-app>.vercel.app
+        sync: false
+      - key: RAG_EMBEDDINGS        # "auto" (semantic + full-text) or "off" (full-text only, lower memory)
+        value: auto
+      - key: FASTEMBED_CACHE_PATH
+        value: /tmp/fastembed
+
+databases:
+  - name: cyberion-db
+    plan: basic-256mb
+    postgresMajorVersion: "15"

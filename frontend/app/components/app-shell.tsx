@@ -9,7 +9,9 @@ const navigation = [
   { href: "/", label: "Overview", icon: "O" },
   { href: "/portfolio", label: "Portfolio", icon: "P" },
   { href: "/markets", label: "Markets", icon: "M" },
-  { href: "/research", label: "Research", icon: "R" },
+  { href: "/research", label: "Models", icon: "R" },
+  { href: "/analyst", label: "SEC Analyst", icon: "A" },
+  { href: "/backtest", label: "Backtest", icon: "B" },
   { href: "/system", label: "System", icon: "S" },
 ];
 
@@ -36,7 +38,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="sidebar-top"><Link className="brand" href="/" onClick={() => setMenuOpen(false)}><span className="brand-mark">AI</span><span className="brand-name">AI Hedge Fund</span></Link><button className="close-menu" aria-label="Close navigation" onClick={() => setMenuOpen(false)}>×</button></div>
       <span className="nav-label">Workspace</span>
       <nav className="nav-list">{navigation.map((item) => <Link key={item.href} className={`nav-item ${pathname === item.href ? "active" : ""}`} href={item.href} aria-current={pathname === item.href ? "page" : undefined} onClick={() => setMenuOpen(false)}><span className="nav-icon">{item.icon}</span><span>{item.label}</span></Link>)}</nav>
-      <div className="sidebar-footer"><span className="live-dot" />Production environment<br />Read-only terminal</div>
+      <div className="sidebar-footer"><span className="live-dot" />Decision-support analytics<br />Not investment advice</div>
     </aside>
     <main className="main-content">
       <header className="topbar"><button className="menu-toggle" aria-label="Open navigation" aria-controls="main-navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}>☰</button><div className="breadcrumb">Workspace <span>/</span> <strong>{navigation.find((item) => item.href === pathname)?.label ?? "Overview"}</strong></div><div className="topbar-right">
@@ -108,6 +110,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   </div>
 </div></header>
       {children}
+      <footer className="app-footer">Forecasts are uncertain estimates, not guarantees. Nothing on this platform is personalised investment advice. Data: yfinance, FRED, SEC EDGAR, Marketaux.</footer>
     </main>
   </div>;
 }

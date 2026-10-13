@@ -1,0 +1,21 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: requires a PostgreSQL database (TEST_DATABASE_URL)",
+    "slow: trains models end-to-end",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::FutureWarning",
+]
+
+[tool.ruff]
+extend-exclude = ["venv", "frontend", "6", "mlflow_artifacts", "data_lake", "backups"]
+
+[tool.coverage.run]
+source = ["common", "data_pipeline", "ml_core", "api"]
+omit = ["ml_core/models/train_*", "ml_core/models/model_tournament.py", "ml_core/models/multi_ticker_validation.py",
+        "ml_core/models/walk_forward_validation.py", "ml_core/models/xgboost_model*.py", "ml_core/nlp/ingest_text.py",
+        "ml_core/nlp/process_text.py", "ml_core/nlp/sentiment_analyzer.py", "ml_core/nlp/rag_indexer.py",
+        "ml_core/nlp/llm_analyst.py"]

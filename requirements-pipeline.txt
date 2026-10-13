@@ -1,0 +1,35 @@
+# Data pipelines, model training and batch inference (Airflow task virtualenv, CI).
+# Versions verified together on Python 3.12.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+alembic==1.18.5
+beautifulsoup4==4.15.0
+boto3==1.43.74
+clarabel==0.11.1
+curl_cffi==0.16.0
+cvxpy==1.9.2
+darts==0.46.1
+fastembed==0.9.0
+great_expectations==1.21.0
+httpx==0.28.1
+joblib==1.5.3
+lxml==6.1.2
+neo4j==6.2.0
+networkx==3.6.1
+numpy==2.5.2
+pandas==2.3.3
+polars==1.43.2
+psycopg2-binary==2.9.12
+pyarrow==25.0.1
+python-dotenv==1.2.2
+redis==8.1.0
+requests==2.34.2
+scikit-learn==1.9.0
+scipy==1.18.0
+scs==3.2.11
+SQLAlchemy==2.0.51
+ta==0.11.0
+torch==2.13.0+cpu
+transformers==5.15.1
+xgboost==3.4.1
+yfinance==1.6.0

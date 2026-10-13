@@ -1,85 +1,138 @@
-services:
+# Local platform stack. Credentials default to local-development values and can
+# be overridden from .env (see .env.example). Never reuse these defaults in production.
+x-db-env: &db-env
+  POSTGRES_USER: ${POSTGRES_USER:-quant_user}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quant_password}
+  POSTGRES_DB: ${POSTGRES_DB:-quant_db}
 
+x-app-env: &app-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:-quant_user}:${POSTGRES_PASSWORD:-quant_password}@postgres:5432/${POSTGRES_DB:-quant_db}
+  MINIO_URL: http://minio:9000
+  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  REDIS_URL: redis://redis:6379/0
+  NEO4J_URI: bolt://neo4j:7687
+  NEO4J_USER: neo4j
+  NEO4J_PASSWORD: ${NEO4J_PASSWORD:-quant_password}
+
+services:
   neo4j:
     image: neo4j:5
-
     environment:
-      NEO4J_AUTH: neo4j/quant_password
-
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-quant_password}
     ports:
-      - "7474:7474"
-      - "7687:7687"
-
+      - "${NEO4J_HTTP_PORT:-7474}:7474"
+      - "${NEO4J_BOLT_PORT:-7687}:7687"
     volumes:
       - neo4jdata:/data
+    restart: unless-stopped
+
   postgres:
     image: pgvector/pgvector:pg15
-
-    environment:
-      POSTGRES_USER: quant_user
-      POSTGRES_PASSWORD: quant_password
-      POSTGRES_DB: quant_db
-
+    environment: *db-env
     ports:
-      - "5432:5432"
-
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-quant_user} -d ${POSTGRES_DB:-quant_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
 
   redis:
     image: redis:7
-
     ports:
-      - "6379:6379"
-
+      - "${REDIS_PORT:-6379}:6379"
+    restart: unless-stopped
 
   minio:
     image: minio/minio
-
     command: server /data --console-address ":9001"
-
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
-      - "9000:9000"
-      - "9001:9001"
-
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - miniodata:/data
+    restart: unless-stopped
 
+  # Creates the Airflow metadata database inside the existing Postgres volume (idempotent).
+  airflow-db-init:
+    image: pgvector/pgvector:pg15
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-quant_password}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        psql -h postgres -U ${POSTGRES_USER:-quant_user} -d ${POSTGRES_DB:-quant_db} -tc
+        "SELECT 1 FROM pg_database WHERE datname = 'airflow'" | grep -q 1 ||
+        psql -h postgres -U ${POSTGRES_USER:-quant_user} -d ${POSTGRES_DB:-quant_db} -c "CREATE DATABASE airflow"
+    restart: "no"
 
   airflow:
     build:
       context: .
       dockerfile: Dockerfile
-
     command: standalone
-
     env_file:
       - .env
-
     environment:
-      MINIO_URL: "http://minio:9000"
-      DB_URL: "postgresql://quant_user:quant_password@postgres:5432/quant_db"
-      AIRFLOW__CORE__DAGS_FOLDER: "/opt/airflow/dags/project/airflow_dags"
-      _AIRFLOW_WWW_USER_USERNAME: "admin"
-      _AIRFLOW_WWW_USER_PASSWORD: "admin"
-
+      <<: *app-env
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags/project/airflow_dags
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__PARALLELISM: 4
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-quant_user}:${POSTGRES_PASSWORD:-quant_password}@postgres:5432/airflow
+      AIRFLOW__SCHEDULER__DAG_DIR_LIST_INTERVAL: 60
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_ADMIN_USER:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
+      PYTHONPATH: /opt/airflow/dags/project
     ports:
-      - "8080:8080"
-
+      - "${AIRFLOW_PORT:-8080}:8080"
     volumes:
       - ./:/opt/airflow/dags/project
-
+      - modelcache:/opt/airflow/.cache
     depends_on:
-      - minio
-      - postgres
+      airflow-db-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      neo4j:
+        condition: service_started
+    restart: unless-stopped
 
+  # Same image and command as the Render web service.
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    env_file:
+      - .env
+    environment:
+      <<: *app-env
+      ENVIRONMENT: development
+      RUN_MIGRATIONS_ON_STARTUP: "true"
+      FRONTEND_ORIGINS: http://localhost:3000
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["api"]
+    restart: unless-stopped
 
 volumes:
   pgdata:
   miniodata:
   neo4jdata:
+  modelcache:

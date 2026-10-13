@@ -338,7 +338,7 @@ def train_tft(data):
     train_cov = data["train_cov"]
     validation_cov = data["validation_cov"]
 
-    target_scaler = data["target_scaler"]
+    _target_scaler = data["target_scaler"]
 
     print()
     print("=" * 70)

@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { EmptyState, ErrorState, SectionHeading, Skeleton } from "../components/dashboard";
 import { api } from "../lib/api";
-import { formatDate, formatNumber, formatPercent } from "../lib/formatters";
+import { formatDate, formatNumber, formatPercent, formatSignedPercent } from "../lib/formatters";
 import type { MarketHistoryPoint, MarketSnapshot, MarketsResponse } from "../types";
+import { ForecastPanel, NewsPanel } from "./forecast-panel";
 import { MarketChart } from "./market-chart";
 
 function formatPrice(value: number | null | undefined) {
@@ -26,11 +27,11 @@ function MarketTable({ markets, selectedTicker, onSelect }: { markets: MarketSna
   return (
     <div className="table-wrap">
       <table className="markets-table">
-        <thead><tr><th>Asset</th><th>Data as of</th><th>Latest close</th><th>1D return</th><th>5D return</th><th>RSI</th><th>20D volatility</th><th>Regime</th></tr></thead>
+        <thead><tr><th>Asset</th><th>Data as of</th><th>Latest close</th><th>1D return</th><th>5D return</th><th>5D forecast</th><th>90% interval</th><th>RSI</th><th>20D volatility</th><th>News (7d)</th><th>Regime</th></tr></thead>
         <tbody>
           {markets.map((market) => (
             <tr key={market.ticker} className={market.ticker === selectedTicker ? "selected-row" : ""} onClick={() => onSelect(market.ticker)}>
-              <td className="ticker">{market.ticker}</td><td>{formatDate(market.date)}</td><td className="price-cell">{formatPrice(market.close)}</td><td><SignalValue value={market.return_1d} /></td><td><SignalValue value={market.return_5d} /></td><td>{formatNumber(market.rsi_14)}</td><td>{formatPercent(market.volatility_20d)}</td><td>{market.regime == null ? "N/A" : `Regime: ${market.regime}`}</td>
+              <td className="ticker">{market.ticker}</td><td>{formatDate(market.date)}</td><td className="price-cell">{formatPrice(market.close)}</td><td><SignalValue value={market.return_1d} /></td><td><SignalValue value={market.return_5d} /></td><td><span className={signalClass(market.forecast_return_5d)}>{formatSignedPercent(market.forecast_return_5d)}</span></td><td>{market.forecast_lower_5d == null ? "N/A" : `${formatSignedPercent(market.forecast_lower_5d, 1)} / ${formatSignedPercent(market.forecast_upper_5d, 1)}`}</td><td>{formatNumber(market.rsi_14)}</td><td>{formatPercent(market.volatility_20d)}</td><td>{market.news_count_7d ? `${market.news_count_7d.toFixed(0)} · ${formatNumber(market.news_sentiment_7d)}` : "—"}</td><td>{market.regime == null ? "N/A" : market.regime ? "High vol" : "Normal"}</td>
             </tr>
           ))}
         </tbody>
@@ -88,7 +89,7 @@ export default function MarketsPage() {
 
   return (
     <>
-      <div className="content-header"><div><span className="eyebrow">Market intelligence</span><h1>Markets</h1><p>Live market context and model-derived market signals.</p></div><span className="as-of">Data as of {formatDate(marketDate ?? undefined)}</span></div>
+      <div className="content-header"><div><span className="eyebrow">Market intelligence</span><h1>Markets</h1><p>End-of-day market data, model forecasts with uncertainty, explanations and news sentiment.</p></div><span className="as-of">Data as of {formatDate(marketDate ?? undefined)}</span></div>
       {marketsFailed ? <ErrorState message="Market data unavailable. Check that the FastAPI service is running and the market endpoints are reachable." /> : null}
       <section className="panel markets-overview-panel" aria-label="Market overview">
         <div className="panel-header"><SectionHeading eyebrow="Cross-asset monitor" title="Market overview" action={markets.length ? <span className="as-of">{markets.length} instruments</span> : null} /></div>
@@ -97,10 +98,10 @@ export default function MarketsPage() {
       {selectedMarket ? (
         <section className="markets-detail-grid" aria-label={`${selectedMarket.ticker} market detail`}>
           <div className="panel market-detail-panel">
-            <div className="panel-header"><SectionHeading eyebrow="Instrument detail" title={selectedMarket.ticker} action={<select className="ticker-select" value={activeTicker} onChange={(event) => setSelectedTicker(event.target.value)} aria-label="Select ticker">{markets.map((market) => <option key={market.ticker} value={market.ticker}>{market.ticker}</option>)}</select>} /></div>
+            <div className="panel-header"><SectionHeading eyebrow={selectedMarket.sector ?? "Instrument detail"} title={selectedMarket.name ? `${selectedMarket.ticker} · ${selectedMarket.name}` : selectedMarket.ticker} action={<select className="ticker-select" value={activeTicker} onChange={(event) => setSelectedTicker(event.target.value)} aria-label="Select ticker">{markets.map((market) => <option key={market.ticker} value={market.ticker}>{market.ticker}</option>)}</select>} /></div>
             <div className="market-price-block"><span className="eyebrow">Latest price</span><strong>{formatPrice(selectedMarket.close)}</strong><span className="as-of">Data as of {formatDate(selectedMarket.date)}</span></div>
             <div className="market-detail-grid">
-              <DetailMetric label="1D return" value={formatPercent(selectedMarket.return_1d)} className={signalClass(selectedMarket.return_1d)} /><DetailMetric label="5D return" value={formatPercent(selectedMarket.return_5d)} className={signalClass(selectedMarket.return_5d)} /><DetailMetric label="RSI" value={formatNumber(selectedMarket.rsi_14)} /><DetailMetric label="MACD" value={formatNumber(selectedMarket.macd)} /><DetailMetric label="20D volatility" value={formatPercent(selectedMarket.volatility_20d)} /><DetailMetric label="Beta vs SPY" value={formatNumber(selectedMarket.beta_60d)} /><DetailMetric label="Correlation vs SPY" value={formatNumber(selectedMarket.correlation_spy_60d)} /><DetailMetric label="Relative return vs market" value={formatPercent(selectedMarket.relative_return_5d)} className={signalClass(selectedMarket.relative_return_5d)} /><DetailMetric label="Regime" value={selectedMarket.regime == null ? "N/A" : `Regime: ${selectedMarket.regime}`} />
+              <DetailMetric label="1D return" value={formatPercent(selectedMarket.return_1d)} className={signalClass(selectedMarket.return_1d)} /><DetailMetric label="5D return" value={formatPercent(selectedMarket.return_5d)} className={signalClass(selectedMarket.return_5d)} /><DetailMetric label="RSI" value={formatNumber(selectedMarket.rsi_14)} /><DetailMetric label="MACD" value={formatNumber(selectedMarket.macd)} /><DetailMetric label="20D volatility" value={formatPercent(selectedMarket.volatility_20d)} /><DetailMetric label="Beta vs SPY" value={formatNumber(selectedMarket.beta_60d)} /><DetailMetric label="Correlation vs SPY" value={formatNumber(selectedMarket.correlation_spy_60d)} /><DetailMetric label="Relative return vs market" value={formatPercent(selectedMarket.relative_return_5d)} className={signalClass(selectedMarket.relative_return_5d)} /><DetailMetric label="Volatility regime" value={selectedMarket.regime == null ? "N/A" : selectedMarket.regime ? "Elevated" : "Normal"} />
             </div>
           </div>
           <div className="panel market-chart-panel">
@@ -109,6 +110,7 @@ export default function MarketsPage() {
           </div>
         </section>
       ) : null}
+      {activeTicker ? <div className="markets-detail-grid"><ForecastPanel ticker={activeTicker} /><NewsPanel ticker={activeTicker} /></div> : null}
     </>
   );
 }

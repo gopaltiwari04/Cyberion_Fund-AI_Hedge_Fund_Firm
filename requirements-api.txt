@@ -1,8 +1,19 @@
+# FastAPI service (Render web service). Kept lean: no torch / xgboost / polars.
+# Forecasts and SHAP explanations are precomputed by the pipelines and read from Postgres.
 fastapi==0.136.3
 uvicorn==0.51.0
 SQLAlchemy==2.0.51
 psycopg2-binary==2.9.12
-joblib==1.5.3
-xgboost==3.4.1
-scikit-learn==1.9.0
+alembic==1.18.5
 numpy==2.5.2
+pandas==2.3.3
+scipy==1.18.0
+cvxpy==1.9.2
+clarabel==0.11.1
+httpx==0.28.1
+joblib==1.5.3
+python-dotenv==1.2.2
+redis==8.1.0
+# Semantic search for the SEC analyst (ONNX, CPU). Set RAG_EMBEDDINGS=off to use
+# full-text retrieval only on very small instances.
+fastembed==0.9.0

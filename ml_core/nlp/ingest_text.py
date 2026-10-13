@@ -84,7 +84,7 @@ def record_exists(content_hash):
     Currently uses a hash against the title/raw_text combination.
     """
 
-    query = text("""
+    _query = text("""
         SELECT 1
         FROM financial_text
         WHERE md5(

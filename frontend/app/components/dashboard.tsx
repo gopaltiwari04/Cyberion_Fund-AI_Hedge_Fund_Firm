@@ -16,6 +16,6 @@ export function EmptyState({ title, message }: { title: string; message: string 
   return <div className="empty-state"><span className="empty-mark">—</span><strong>{title}</strong><p>{message}</p></div>;
 }
 
-export function ErrorState({ message }: { message: string }) {
-  return <div className="error-state" role="alert"><span className="error-icon">!</span><div><strong>API unavailable</strong><p>{message}</p></div></div>;
+export function ErrorState({ message, title = "Unable to load data" }: { message: string; title?: string }) {
+  return <div className="error-state" role="alert"><span className="error-icon">!</span><div><strong>{title}</strong><p>{message}</p></div></div>;
 }

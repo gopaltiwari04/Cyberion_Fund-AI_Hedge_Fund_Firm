@@ -1,5 +1,29 @@
+# Python
 venv/
-.env
+.venv/
 __pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets (keep .env.example)
+.env
+.env.*
+!.env.example
+
+# Local data, dumps and caches
 *.db
+*.dump
 quant_db.dump
+backups/
+data_lake/
+mlruns/
+.cache/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
