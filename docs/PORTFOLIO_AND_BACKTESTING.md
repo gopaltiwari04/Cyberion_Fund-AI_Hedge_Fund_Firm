@@ -47,3 +47,28 @@ data snapshot and code version; identical inputs reproduce identical results (te
 Known biases (shown with every result): survivorship (fixed present-day universe), proportional slippage
 only, fractional shares, no taxes. Forecasts used are walk-forward out-of-sample; the risk model uses only
 trailing data.
+
+## Measured results (local run, data through 2026-10-13)
+
+Backtest 2019-01-02 → 2026-10-13, balanced profile (CVaR 2.5%, max weight 30%), 1 bp commission + 5 bp
+slippage, out-of-sample walk-forward forecasts of the 5-day model. Config hash `62350da28402e3f3`.
+
+| Strategy | CAGR | Vol | Sharpe | Sortino | Max DD | 1d CVaR95 | Turnover/yr | Costs (% initial) |
+|---|---|---|---|---|---|---|---|---|
+| ML + CVaR, weekly | 17.1% | 16.9% | 0.86 | 1.22 | −29.9% | 2.51% | 1210% | 10.0% |
+| Equal weight, weekly | 26.0% | 18.7% | 1.18 | 1.71 | −28.0% | 2.74% | 128% | 1.6% |
+| SPY buy & hold | 16.9% | 18.4% | 0.79 | 1.11 | −33.1% | 2.77% | 13% | 0.06% |
+
+Sensitivity of the ML strategy (same window):
+
+| Variant | CAGR | Sharpe | Max DD | Turnover/yr | Costs |
+|---|---|---|---|---|---|
+| weekly, turnover cap 30% | 15.6% | 0.78 | −27.9% | 961% | 7.9% |
+| weekly, turnover cap 20% | 14.5% | 0.74 | −27.9% | 781% | 6.2% |
+| monthly, no cap | 17.9% | 0.89 | −29.1% | 513% | 4.5% |
+
+Reading: the forecast-driven portfolio slightly beats SPY on a risk-adjusted basis with lower volatility,
+drawdown and CVaR, but trails equal weight over this period (which benefits most from the survivorship-biased
+mega-cap universe). Turnover is high because short-horizon forecasts change quickly; capping turnover lowers
+costs but also returns. Defaults were deliberately **not** tuned to these backtests (that would overfit the
+test period); rebalance frequency and turnover caps are user settings.

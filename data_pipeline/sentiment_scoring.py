@@ -35,12 +35,37 @@ logger = get_logger(__name__)
 POSITIVE_THRESHOLD = 0.2
 
 
+def mentions_company(ticker: str, *texts: str | None) -> bool:
+    """Keyword-search news APIs return many unrelated articles; require the company to be named."""
+    from ml_core.rag.retriever import COMPANY_ALIASES
+
+    haystack = " ".join(value or "" for value in texts).lower()
+    aliases = COMPANY_ALIASES.get(ticker, [ticker.lower()])
+    return any(re.search(rf"(?<![a-z]){re.escape(alias)}(?![a-z])", haystack) for alias in aliases)
+
+
+def remove_irrelevant_legacy_news() -> int:
+    """Drop migrated NewsAPI copies that never mention the company (originals stay in financial_text)."""
+    with get_engine().connect() as conn:
+        rows = pd.read_sql(
+            text("SELECT id, ticker, title, description FROM financial_news WHERE source = 'newsapi'"), conn
+        )
+    irrelevant = [int(row.id) for row in rows.itertuples() if not mentions_company(row.ticker, row.title, row.description)]
+    if irrelevant:
+        with get_engine().begin() as conn:
+            conn.execute(text("DELETE FROM financial_news WHERE id = ANY(:ids)"), {"ids": irrelevant})
+    return len(irrelevant)
+
+
 def backfill_legacy_news() -> int:
     with get_engine().connect() as conn:
         legacy = pd.read_sql(
             text("SELECT ticker, published_at, title, raw_text FROM financial_text WHERE source = 'news'"),
             conn,
         )
+    if legacy.empty:
+        return 0
+    legacy = legacy[[mentions_company(row.ticker, row.title, (row.raw_text or "")[:2000]) for row in legacy.itertuples()]]
     if legacy.empty:
         return 0
     legacy["uuid"] = [
@@ -222,6 +247,8 @@ def aggregate_daily(ctx: RunContext) -> int:
         return 0
     records = daily.astype(object).where(daily.notna(), None).to_dict(orient="records")
     with get_engine().begin() as conn:
+        # Fully derived from financial_news: rebuild atomically so removed articles disappear too.
+        conn.execute(text("DELETE FROM news_sentiment_daily"))
         conn.execute(
             text(
                 """
@@ -251,6 +278,7 @@ def main() -> None:
     pipeline, task = ("news_intelligence", "finbert_news") if args.skip_filings else ("sec_filings", "finbert_sentiment")
     with track_run(pipeline, task) as ctx:
         ctx.details["legacy_backfilled"] = backfill_legacy_news()
+        ctx.details["legacy_irrelevant_removed"] = remove_irrelevant_legacy_news()
         ctx.add_rows(score_news(ctx))
         if not args.skip_filings:
             ctx.add_rows(score_filings(ctx))

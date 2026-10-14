@@ -39,10 +39,12 @@ def psi(reference: np.ndarray, current: np.ndarray, bins: int = 10) -> float | N
     if len(edges) < 3:
         return None
     edges[0], edges[-1] = -np.inf, np.inf
-    ref_share = np.histogram(reference, edges)[0] / len(reference)
-    cur_share = np.histogram(current, edges)[0] / len(current)
-    ref_share = np.clip(ref_share, 1e-4, None)
-    cur_share = np.clip(cur_share, 1e-4, None)
+    # Jeffreys (+0.5 per bin) smoothing: with ~60-day windows a fixed tiny floor for
+    # empty bins (e.g. 1e-4) dominates the statistic and grossly overstates drift.
+    ref_counts = np.histogram(reference, edges)[0] + 0.5
+    cur_counts = np.histogram(current, edges)[0] + 0.5
+    ref_share = ref_counts / ref_counts.sum()
+    cur_share = cur_counts / cur_counts.sum()
     return float(np.sum((cur_share - ref_share) * np.log(cur_share / ref_share)))
 
 
@@ -86,7 +88,13 @@ def monitor_model(model: dict, frame: pd.DataFrame) -> list[dict]:
     recent_dates = dates[-RECENT_DAYS:]
     reference = frame[frame["date"].isin(reference_dates)]
     recent = frame[frame["date"].isin(recent_dates)]
-    scores = {feature: psi(reference[feature].to_numpy(float), recent[feature].to_numpy(float)) for feature in features}
+    def values(frame_part: pd.DataFrame, feature: str) -> np.ndarray:
+        # Market-wide features (VIX, rates, ...) repeat across tickers on a date; count each date once.
+        if frame_part.groupby("date")[feature].nunique(dropna=True).max() <= 1:
+            return frame_part.drop_duplicates("date")[feature].to_numpy(float)
+        return frame_part[feature].to_numpy(float)
+
+    scores = {feature: psi(values(reference, feature), values(recent, feature)) for feature in features}
     valid = {k: v for k, v in scores.items() if v is not None}
     if valid:
         worst = max(valid, key=valid.get)

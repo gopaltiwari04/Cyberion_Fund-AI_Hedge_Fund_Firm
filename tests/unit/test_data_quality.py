@@ -106,3 +106,12 @@ def test_substantive_passages_prefer_exhibits():
     document = "Cover page check the appropriate box below " * 3 + "\n" + "EXHIBIT ex99.htm\n" + ("Revenue grew strongly in the quarter driven by services demand. " * 3 + "\n") * 5
     passages = substantive_passages(document)
     assert passages and all("Revenue grew" in passage for passage in passages)
+
+
+def test_news_relevance_requires_company_mention():
+    from data_pipeline.sentiment_scoring import mentions_company
+
+    assert mentions_company("AAPL", "Apple launches HomeView", None)
+    assert mentions_company("JPM", "Bank results", "JPMorgan beat estimates")
+    assert not mentions_company("AAPL", "Emmys reveal more presenters", "Awards night lineup")
+    assert not mentions_company("META", "Metadata tooling release", None)
