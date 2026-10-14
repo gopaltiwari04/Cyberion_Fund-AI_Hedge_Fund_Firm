@@ -81,7 +81,8 @@ def get_all_models(db: Session = Depends(get_db)):
     for row in rows:
         item = dict(row)
         importance = item.pop("feature_importance") or {}
-        item["feature_importance"] = [{**describe(name), "importance": value} for name, value in list(importance.items())[:20]]
+        ranked = sorted(importance.items(), key=lambda pair: -pair[1])[:20]  # jsonb does not preserve key order
+        item["feature_importance"] = [{**describe(name), "importance": value} for name, value in ranked]
         models.append(jsonable(item))
     return {"models": models, "challengers": [jsonable(dict(row)) for row in challengers]}
 

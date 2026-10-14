@@ -24,6 +24,8 @@
 * yfinance is an unofficial Yahoo interface without an SLA; the pipeline retries, validates and detects
   revisions, but a licensed feed would be needed for institutional use. Stooq now requires a browser
   challenge and is not used.
+* Keyword-based news APIs return many unrelated articles (e.g. 803 of 1,357 legacy NewsAPI items tagged
+  AAPL/MSFT never mentioned the company). Articles must now name the company (ticker or alias) to be used.
 * News coverage is thin: the Marketaux free plan returns 3 articles per request (≈48 requests/day are
   scheduled), and the NewsAPI history covers only a few days in Aug–Sep 2026. News sentiment is therefore
   missing for most of the training history; the model treats it as missing rather than neutral.
@@ -40,7 +42,13 @@
 * Conformal intervals assume exchangeability; in time series their coverage drifts with regime changes.
   Coverage is measured out-of-sample and monitored in production.
 * Hyperparameters are fixed (selected among four candidates on pre-2020 folds), not exhaustively tuned.
-* The TFT challenger is trained on CPU with a small configuration; it is evaluated, not served.
+* The TFT challenger is trained on CPU with a small configuration (8 epochs). On the latest one-year
+  holdout it underperformed XGBoost (IC 0.011 vs 0.028, R² −0.55 vs +0.01), so it is evaluated, not served.
+* The 5- and 21-day forecasts overstate magnitudes (reliability slopes 0.27 / 0.37: realised returns move
+  about a third as much as forecast; the 1-day model is well scaled at 1.10). Their ranks carry more
+  signal than their levels, which is one reason the optimiser shrinks forecasts by demonstrated skill.
+* As of 2026-10-13 monitoring flags significant VIX distribution drift (PSI ≈ 0.97): the recent volatility
+  regime is unusually narrow versus the training window. Rolling IC and interval coverage remain healthy.
 
 ## Portfolio & backtesting
 

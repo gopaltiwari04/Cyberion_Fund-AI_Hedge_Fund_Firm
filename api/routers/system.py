@@ -151,7 +151,7 @@ def monitoring(db: Session = Depends(get_db), days: int = 120):
             """
             SELECT m.as_of_date, m.metric, m.value, m.details, r.horizon_days, r.version
             FROM model_monitoring m JOIN model_registry r ON r.id = m.model_id
-            WHERE m.as_of_date >= :since ORDER BY m.as_of_date
+            WHERE m.as_of_date >= :since AND r.status = 'active' ORDER BY m.as_of_date
             """
         ),
         {"since": since},

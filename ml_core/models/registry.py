@@ -33,8 +33,10 @@ def code_version() -> str:
     if os.getenv("GIT_SHA"):
         return os.environ["GIT_SHA"][:12]
     try:
-        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=PROJECT_ROOT, stderr=subprocess.DEVNULL)
-        dirty = subprocess.call(["git", "diff", "--quiet"], cwd=PROJECT_ROOT, stderr=subprocess.DEVNULL) != 0
+        # safe.directory: the repo is bind-mounted into containers under a different owner.
+        git = ["git", "-c", f"safe.directory={PROJECT_ROOT.as_posix()}"]
+        sha = subprocess.check_output([*git, "rev-parse", "HEAD"], cwd=PROJECT_ROOT, stderr=subprocess.DEVNULL)
+        dirty = subprocess.call([*git, "diff", "--quiet"], cwd=PROJECT_ROOT, stderr=subprocess.DEVNULL) != 0
         return sha.decode().strip()[:12] + ("-dirty" if dirty else "")
     except (OSError, subprocess.CalledProcessError):
         return "unknown"

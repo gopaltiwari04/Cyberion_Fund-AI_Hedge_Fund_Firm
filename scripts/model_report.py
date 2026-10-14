@@ -96,7 +96,7 @@ def main() -> None:
         lines.append(f"| {year} | " + " | ".join(num(((m["metrics"] or {}).get("ic_by_year") or {}).get(year)) for m in models) + " |")
 
     for model in models:
-        importance = list((model["feature_importance"] or {}).items())[:10]
+        importance = sorted((model["feature_importance"] or {}).items(), key=lambda item: -item[1])[:10]  # jsonb does not keep order
         lines += ["", f"### Top features, {model['horizon_days']}-day model (mean |SHAP|, last 12 months)", ""]
         lines += [f"{i}. {describe(name)['label']} ({describe(name)['group']}) — {value * 100:.1f}%" for i, (name, value) in enumerate(importance, 1)]
         calibration = model["calibration"] or {}
