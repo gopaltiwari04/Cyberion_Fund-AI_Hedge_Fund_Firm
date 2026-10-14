@@ -34,12 +34,13 @@ def run_migrations() -> None:
     from alembic.config import Config
 
     settings = get_settings()
-    with get_engine().connect() as conn:
+    # Direct (non-pooled) connection: session advisory locks do not survive PgBouncer transaction pooling.
+    with get_engine(settings.migration_database_url).connect() as conn:
         conn.execute(text("SELECT pg_advisory_lock(:id)"), {"id": MIGRATION_LOCK_ID})
         try:
             config = Config(str(PROJECT_ROOT / "alembic.ini"))
             config.set_main_option("script_location", str(PROJECT_ROOT / "db" / "migrations"))
-            config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
+            config.set_main_option("sqlalchemy.url", settings.migration_database_url.replace("%", "%%"))
             config.attributes["skip_env_url"] = True
             command.upgrade(config, "head")
             logger.info("Database migrations applied")

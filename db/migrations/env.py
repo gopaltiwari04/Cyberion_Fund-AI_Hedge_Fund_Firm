@@ -10,7 +10,8 @@ config = context.config
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Keep application loggers alive when migrations run in-process (API startup, publish).
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 import os  # noqa: E402
 import sys  # noqa: E402
@@ -24,7 +25,7 @@ from common.config import get_settings  # noqa: E402
 # DATABASE_URL (or a URL passed by the caller) always wins over alembic.ini so
 # local Docker, CI and Render run migrations against the right database.
 if not config.attributes.get("skip_env_url"):
-    config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
+    config.set_main_option("sqlalchemy.url", get_settings().migration_database_url.replace("%", "%%"))
 
 # Import the Base from your models file
 from db.models import Base  # noqa: E402

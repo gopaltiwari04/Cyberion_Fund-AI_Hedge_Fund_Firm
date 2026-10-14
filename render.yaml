@@ -1,11 +1,13 @@
-# Render Blueprint for the API. The existing service can keep its dashboard
-# settings; this file documents the expected configuration and can be applied
-# with "New > Blueprint" for a fresh environment.
+# Render Blueprint for the API, using Neon PostgreSQL (the former Render database expired).
+# The existing service can keep its dashboard settings; this file documents the expected
+# configuration and can be applied with "New > Blueprint". No Render database is created.
 services:
   - type: web
     name: cyberion-api
     runtime: python
-    plan: starter
+    # "free" spins down when idle (cold starts ~30-60 s) and has 512 MB RAM; measured API peak
+    # with the embedding model loaded is ~390 MB. Use "starter" for always-on (paid).
+    plan: free
     buildCommand: pip install -r requirements-api.txt
     startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
     healthCheckPath: /health
@@ -15,26 +17,35 @@ services:
         value: "3.12.8"
       - key: ENVIRONMENT
         value: production
+      # Neon *pooled* connection string (host contains "-pooler", sslmode=require).
+      # Migrations automatically use the matching direct endpoint (advisory locks need it).
+      - key: DATABASE_URL
+        sync: false
       - key: RUN_MIGRATIONS_ON_STARTUP
         value: "true"
+      - key: DB_POOL_SIZE
+        value: "3"
+      - key: DB_MAX_OVERFLOW
+        value: "2"
+      - key: DB_POOL_RECYCLE        # Neon suspends idle computes; recycle before its idle timeout
+        value: "240"
+      - key: DB_APPLICATION_NAME
+        value: cyberion-api-render
+      - key: BACKTEST_WORKERS       # keep memory within the free instance
+        value: "1"
       - key: LOG_FORMAT
         value: json
-      - key: DATABASE_URL
-        fromDatabase:
-          name: cyberion-db
-          property: connectionString
-      - key: INTERNAL_API_SECRET   # must equal the Vercel INTERNAL_API_SECRET
+      - key: INTERNAL_API_SECRET    # must equal the Vercel INTERNAL_API_SECRET
         sync: false
       - key: GEMINI_API_KEY
         sync: false
-      - key: FRONTEND_ORIGINS      # e.g. https://<your-app>.vercel.app
+      - key: LLM_MODEL
+        value: gemini-2.5-flash
+      - key: LLM_FALLBACK_MODELS
+        value: gemini-flash-latest
+      - key: FRONTEND_ORIGINS       # e.g. https://<your-app>.vercel.app
         sync: false
-      - key: RAG_EMBEDDINGS        # "auto" (semantic + full-text) or "off" (full-text only, lower memory)
+      - key: RAG_EMBEDDINGS         # "auto" (semantic + full-text) or "off" (full-text only, ~150 MB less RAM)
         value: auto
       - key: FASTEMBED_CACHE_PATH
         value: /tmp/fastembed
-
-databases:
-  - name: cyberion-db
-    plan: basic-256mb
-    postgresMajorVersion: "15"

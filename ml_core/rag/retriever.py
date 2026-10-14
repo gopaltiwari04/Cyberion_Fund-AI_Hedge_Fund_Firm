@@ -108,6 +108,14 @@ def semantic_candidates(question: str, where: str, params: dict) -> list[dict]:
         ).scalar()
         if not has_column:
             return []
+        if where:
+            # Filters are applied after the HNSW scan; iterative scans (pgvector >= 0.8) keep
+            # searching until enough filtered rows are found instead of returning too few.
+            try:
+                with conn.begin_nested():
+                    conn.execute(text("SET LOCAL hnsw.iterative_scan = relaxed_order"))
+            except Exception:  # noqa: BLE001 - older pgvector: fall back to the default scan
+                pass
         rows = conn.execute(
             text(
                 f"""

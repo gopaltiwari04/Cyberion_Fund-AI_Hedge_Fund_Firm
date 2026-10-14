@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -23,7 +24,7 @@ from ml_core.models.registry import code_version
 logger = get_logger(__name__)
 router = APIRouter(prefix="/backtests", tags=["backtests"])
 
-_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="backtest")
+_executor = ThreadPoolExecutor(max_workers=max(1, int(os.getenv("BACKTEST_WORKERS", "2"))), thread_name_prefix="backtest")
 _lock = threading.Lock()
 
 

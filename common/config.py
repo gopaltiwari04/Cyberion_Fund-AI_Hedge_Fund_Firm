@@ -19,6 +19,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 try:  # Optional in production images.
     from dotenv import load_dotenv
 
+    # ENV_FILE (e.g. ".env.neon") is loaded first so it can point a local process at a
+    # different database without editing .env, which Docker/Airflow also use.
+    if os.getenv("ENV_FILE"):
+        load_dotenv(PROJECT_ROOT / os.environ["ENV_FILE"], override=False)
     load_dotenv(PROJECT_ROOT / ".env", override=False)
 except ImportError:  # pragma: no cover - dotenv is a dev convenience
     pass
@@ -33,6 +37,21 @@ def normalize_database_url(url: str) -> str:
     if url.startswith("postgres://"):
         url = "postgresql://" + url[len("postgres://"):]
     return url
+
+
+def direct_database_url(url: str) -> str:
+    """
+    Neon exposes a PgBouncer (transaction-mode) endpoint whose host contains "-pooler".
+    Migrations and publishing take session-level advisory locks, which need the direct
+    endpoint; derive it when only the pooled URL is configured.
+    """
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(url)
+    host = parts.hostname or ""
+    if "-pooler." not in host:
+        return url
+    return urlunsplit(parts._replace(netloc=parts.netloc.replace(host, host.replace("-pooler.", ".", 1))))
 
 
 def _env(name: str, default: str | None = None) -> str | None:
@@ -63,6 +82,7 @@ def _env_int(name: str, default: int) -> int:
 class Settings:
     environment: str
     database_url: str
+    migration_database_url: str
     production_database_url: str | None
 
     storage_backend: str
@@ -121,6 +141,7 @@ def get_settings() -> Settings:
     return Settings(
         environment=(_env("ENVIRONMENT", "development") or "development").lower(),
         database_url=database_url,
+        migration_database_url=normalize_database_url(_env("MIGRATION_DATABASE_URL") or direct_database_url(database_url)),
         production_database_url=normalize_database_url(production_url) if production_url else None,
         storage_backend=(_env("STORAGE_BACKEND", "s3") or "s3").lower(),
         minio_endpoint=_env("MINIO_URL") or _env("MINIO_ENDPOINT") or "http://localhost:9000",

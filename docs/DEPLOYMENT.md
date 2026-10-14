@@ -5,9 +5,34 @@ Three deployable parts share one environment contract (`.env.example`):
 | Component | Where | Entry point |
 |---|---|---|
 | API | Render web service | `uvicorn api.main:app --host 0.0.0.0 --port $PORT` (unchanged) |
-| Production DB | Render PostgreSQL (pgvector enabled by migration) | — |
+| Production DB | Neon PostgreSQL (project `cyberion-fund`, pgvector 0.8.6) | — |
 | Dashboard | Vercel (root directory `frontend/`) | `next build` |
 | Pipelines | Docker host running `docker compose up -d` (Airflow) | DAGs in `airflow_dags/` |
+
+## 0. Production database: Neon
+
+The original Render PostgreSQL (`aihedgefund-db`) expired. Production now uses Neon:
+
+* **Pooled URL** (host contains `-pooler`, PgBouncer transaction mode) for the API (`DATABASE_URL`).
+* **Direct URL** for migrations and publishing — derived automatically from the pooled URL
+  (`common.config.direct_database_url`) or set explicitly as `MIGRATION_DATABASE_URL`. Session-level
+  advisory locks used by migrations do not work through transaction pooling.
+* Always `sslmode=require` (Neon URLs include it; TLS 1.3 verified). Neon suspends idle computes, so the
+  engine pings and recycles connections (`DB_POOL_RECYCLE`, keepalives).
+* Capacity: the serving data set is ~232 MB on Neon (24k SEC chunks with 384-d vectors are 177 MB of it).
+  Check the project's storage limit before widening `SEC_RAG_YEARS` or the universe.
+
+Initial load (done 2026-10-15, verified row-for-row): `python -m data_pipeline.publish --full` with
+`PRODUCTION_DATABASE_URL` set to the Neon URL. It migrates the schema to head, then upserts serving tables in
+500-row batches (one round trip per batch).
+
+Local development against Neon, without touching `.env` (which Docker/Airflow use):
+
+```bash
+# .env.neon (git- and docker-ignored):  DATABASE_URL=<neon connection string>
+ENV_FILE=.env.neon uvicorn api.main:app --host 127.0.0.1 --port 8001
+# frontend/.env.local: FASTAPI_URL=http://127.0.0.1:8001 ; dashboard on http://localhost:3001
+```
 
 ## 1. Render API
 
@@ -18,7 +43,8 @@ Settings (dashboard or `render.yaml` blueprint):
 * Health check path: `/health`
 * Environment:
   * `ENVIRONMENT=production`
-  * `DATABASE_URL` — Render internal connection string (`postgres://` is normalised automatically)
+  * `DATABASE_URL` — **Neon pooled connection string** (`postgres://` is normalised automatically)
+  * `DB_POOL_SIZE=3`, `DB_MAX_OVERFLOW=2`, `DB_POOL_RECYCLE=240`, `BACKTEST_WORKERS=1` on the free instance
   * `RUN_MIGRATIONS_ON_STARTUP=true` — applies Alembic migrations under a Postgres advisory lock. The
     production migration is additive and idempotent (`IF NOT EXISTS`); it never drops data.
   * `INTERNAL_API_SECRET` — same value as Vercel. **Until it is set, production serves only public
@@ -41,6 +67,8 @@ Project root `frontend/`. Environment variables:
 * `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` (Google OAuth redirect URI:
   `https://<app>.vercel.app/api/auth/callback/google`)
 * `FASTAPI_URL=https://<service>.onrender.com`
+* Google OAuth client: add `https://<app>.vercel.app/api/auth/callback/google` (and keep
+  `http://localhost:3001/api/auth/callback/google` for local development)
 * `INTERNAL_API_SECRET` (same as Render)
 
 All browser API calls go to `/api/*` on Vercel; the route handler checks the NextAuth session, allow-lists
@@ -53,7 +81,8 @@ both. The API stays backward compatible for read-only endpoints in the meantime.
 
 The Airflow stack writes to its local warehouse database. To feed production:
 
-1. Set `PRODUCTION_DATABASE_URL` in `.env` to the Render **external** connection string.
+1. Set `PRODUCTION_DATABASE_URL` in `.env` to the Neon connection string (pooled or direct; the direct
+   endpoint is used automatically).
 2. `docker compose up -d airflow`. The `publish_to_production` task (after the daily market pipeline and
    weekly training) migrates the production schema and incrementally upserts serving tables using natural
    keys and watermarks. User-owned tables are never touched and model artifacts are not copied.

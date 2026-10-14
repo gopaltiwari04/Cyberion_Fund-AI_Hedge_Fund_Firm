@@ -27,13 +27,14 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from common.config import get_settings
+from common.config import direct_database_url, get_settings
 from common.db import get_engine
 from common.logs import get_logger
 from common.runs import track_run
 
 logger = get_logger(__name__)
 BATCH = 2000
+PAGE_SIZE = 500
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,30 @@ def _value_list(columns: list[str], types: dict[str, str]) -> str:
     return ", ".join(parts)
 
 
+def _template(columns: list[str], types: dict[str, str]) -> str:
+    casts = {"jsonb": "::jsonb", "json": "::jsonb", "vector": "::vector"}
+    return "(" + ", ".join(f"%s{casts.get(types[column], '')}" for column in columns) + ")"
+
+
+def _bulk_upsert(engine: Engine, statement: str, template: str, rows: list[tuple]) -> None:
+    """
+    Multi-row VALUES inserts (psycopg2 execute_values): one network round trip per page
+    instead of one per row, which matters over a WAN link to a hosted database.
+    """
+    from psycopg2.extras import execute_values
+
+    raw = engine.raw_connection()
+    try:
+        with raw.cursor() as cursor:
+            execute_values(cursor, statement, rows, template=template, page_size=PAGE_SIZE)
+        raw.commit()
+    except Exception:
+        raw.rollback()
+        raise
+    finally:
+        raw.close()
+
+
 def _records(frame: pd.DataFrame) -> list[dict]:
     frame = frame.astype(object).where(frame.notna(), None)
     return frame.to_dict(orient="records")
@@ -120,24 +145,26 @@ def sync_table(local: Engine, prod: Engine, spec: TableSpec, full: bool) -> int:
             params["wm"] = watermark
     updates = [c for c in columns if c not in spec.keys]
     conflict = f"DO UPDATE SET {', '.join(f'{c} = EXCLUDED.{c}' for c in updates)}" if updates else "DO NOTHING"
-    insert = text(
-        f"INSERT INTO {spec.name} ({', '.join(columns)}) VALUES ({_value_list(columns, prod_types)}) "
+    statement = (
+        f"INSERT INTO {spec.name} ({', '.join(columns)}) VALUES %s "
         f"ON CONFLICT ({', '.join(spec.keys)}) {conflict}"
     )
+    template = _template(columns, prod_types)
     total = 0
     with local.connect() as source:
         for chunk in pd.read_sql(text(query), source, params=params, chunksize=BATCH):
             records = _records(chunk)
             if not records:  # pandas yields one empty chunk for an empty result
                 continue
+            rows = []
             for record in records:
                 for column in columns:
                     value = record[column]
                     if local_types[column] in ("jsonb", "json") and value is not None and not isinstance(value, str):
                         record[column] = json.dumps(value)
-            with prod.begin() as target:
-                target.execute(insert, records)
-            total += len(records)
+                rows.append(tuple(record[column] for column in columns))
+            _bulk_upsert(prod, statement, template, rows)
+            total += len(rows)
     return total
 
 
@@ -205,6 +232,7 @@ def migrate(url: str) -> None:
 
     from common.config import PROJECT_ROOT
 
+    url = direct_database_url(url)  # advisory locks + DDL need the non-pooled endpoint
     engine = get_engine(url)
     with engine.connect() as conn:
         conn.execute(text("SELECT pg_advisory_lock(727001)"))
@@ -219,6 +247,8 @@ def migrate(url: str) -> None:
 
 
 def publish(target_url: str, full: bool = False) -> dict:
+
+    target_url = direct_database_url(target_url)
     migrate(target_url)
     local, prod = get_engine(), get_engine(target_url)
     summary = {}
@@ -240,7 +270,7 @@ def main() -> None:
         if not target:
             ctx.warn("PRODUCTION_DATABASE_URL not configured; publish skipped")
             return
-        if target == get_settings().database_url:
+        if direct_database_url(target) in (get_settings().database_url, get_settings().migration_database_url):
             raise RuntimeError("Production URL equals the warehouse URL; refusing to publish onto itself")
         summary = publish(target, args.full)
         ctx.details.update(summary)
